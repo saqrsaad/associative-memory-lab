@@ -104,7 +104,7 @@ For input dimension `n` and target dimension `m`:
 | --- | --- |
 | Source `s` | `(n,)` |
 | Target `t` | `(m,)` |
-| Weight matrix `W` | `(n, m)` |
+| Weight matrix `W` | `(n, m)` for heteroassociative memory, `(n, n)` for autoassociative memory |
 | Query `x` | `(n,)` |
 | Net input `y_in = x @ W` | `(m,)` |
 | Activated output `y` | `(m,)` |
@@ -115,8 +115,9 @@ $$
 y_{\text{in}} = xW
 $$
 
-where `@` denotes ordinary matrix multiplication. For a query of shape `(n,)`
-and a weight matrix of shape `(n, m)`, the result has shape `(m,)`.
+Equivalently, `y_in = x @ W`, where `@` denotes ordinary matrix multiplication.
+For a query of shape `(n,)` and a weight matrix of shape `(n, m)`, the result has
+shape `(m,)`.
 
 Many texts use column vectors and write the equivalent operations with
 transposes. Those column-vector conventions exist in the literature but are not
@@ -160,6 +161,9 @@ The outer product is the matrix formulation of the pairwise Hebbian
 contribution; it is not a separate competing learning rule. For bipolar data,
 negative products and negative accumulated weights are expected and must be
 preserved.
+
+With NumPy one-dimensional arrays, each contribution is computed with
+`np.outer(s, t)` and the accumulated matrix is applied with `x @ W`.
 
 The basic course algorithm keeps the full diagonal of `W`. Setting the diagonal
 to zero is not a default, is not an implicit normalization step, and is outside
@@ -213,10 +217,15 @@ $$
 | `a = 0` | `0` | `-1` |
 | `a > 0` | `1` | `+1` |
 
-The comparison is strictly `a > 0`. Zero maps to `0` for binary activation and
-to `-1` for bipolar activation. Do not substitute `a >= 0`, do not preserve the
-query value at zero, and do not apply a different tie rule. The zero case is part
-of the algorithm and must be covered by algorithm tests in Task 02.
+The activation threshold is zero. The comparison is strictly `a > 0`. Zero maps
+to `0` for binary activation and to `-1` for bipolar activation. Do not
+substitute `a >= 0`, do not preserve the query value at zero, and do not apply a
+different tie rule. The zero case is part of the algorithm and must be covered by
+algorithm tests in Task 02.
+
+With NumPy one-dimensional arrays, the binary rule can be written as
+`np.where(a > 0, 1, 0)` and the bipolar rule as `np.where(a > 0, 1, -1)`. The
+strict `>` comparison is required.
 
 The output encoding must match the configured encoding. Do not apply binary
 activation to a bipolar experiment or vice versa without an explicit,

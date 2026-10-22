@@ -1,0 +1,541 @@
+/*
+ * Associative Memory Lab — application stylesheet (template).
+ *
+ * This file contains trailing-token placeholders (at-sign wrapped design
+ * token names) substituted by ``presentation/theme/__init__.py`` from
+ * palette.py, typography.py, and spacing.py. Size tokens already carry
+ * their ``px`` unit. Do not hardcode other colors or font families here,
+ * and do not copy this styling into individual widgets: views achieve
+ * variant looks through object names and dynamic properties only.
+ */
+
+/* ---------- Global text and surface defaults ---------- */
+
+QWidget {
+    background: @BG_CANVAS@;
+    color: @TEXT_PRIMARY@;
+    font-family: @UI_FONT_STACK@;
+    font-size: @FONT_BODY@;
+}
+
+QLabel,
+QCheckBox,
+QRadioButton {
+    background: transparent;
+}
+
+QMainWindow {
+    background: @BG_CANVAS@;
+}
+
+QToolTip {
+    background: @SURFACE@;
+    color: @TEXT_PRIMARY@;
+    border: @BORDER_WIDTH@ solid @BORDER_STRONG@;
+    padding: @SPACE_XXXS@ @SPACE_XXS@;
+    font-size: @FONT_SMALL@;
+}
+
+/* ---------- Buttons ---------- */
+
+QPushButton {
+    background: @SURFACE@;
+    color: @TEXT_PRIMARY@;
+    border: @FOCUS_BORDER_WIDTH@ solid transparent;
+    border-radius: @CONTROL_RADIUS@;
+    padding: @SPACE_XXXS@ @SPACE_SM@;
+    min-height: @CONTROL_MIN_HEIGHT@;
+}
+
+QPushButton:hover {
+    border-color: @BORDER@;
+}
+
+QPushButton:focus {
+    border-color: @PRIMARY@;
+}
+
+QPushButton:pressed {
+    background: @SURFACE_ALT@;
+    border-color: @PRIMARY@;
+}
+
+QPushButton:disabled {
+    background: @NEUTRAL_SOFT@;
+    color: @TEXT_DISABLED@;
+    border-color: transparent;
+}
+
+QPushButton[variant="primary"] {
+    background: @PRIMARY@;
+    color: @SURFACE@;
+    border: @FOCUS_BORDER_WIDTH@ solid @PRIMARY@;
+    font-weight: 600;
+}
+
+QPushButton[variant="primary"]:hover {
+    background: @PRIMARY_HOVER@;
+    border-color: @PRIMARY_HOVER@;
+}
+
+QPushButton[variant="primary"]:focus {
+    border-color: @PRIMARY_PRESSED@;
+}
+
+QPushButton[variant="primary"]:pressed {
+    background: @PRIMARY_PRESSED@;
+    border-color: @PRIMARY_PRESSED@;
+}
+
+QPushButton[variant="primary"]:disabled {
+    background: @NEUTRAL_SOFT@;
+    color: @TEXT_DISABLED@;
+    border-color: transparent;
+    font-weight: 400;
+}
+
+/* ---------- Header labels ---------- */
+
+QLabel#AppHeaderTitle {
+    font-size: @FONT_HEADER@;
+    font-weight: 600;
+    background: transparent;
+}
+
+QLabel#AppHeaderSubtitle {
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_SMALL@;
+    background: transparent;
+}
+
+/* ---------- Metric card ---------- */
+
+QFrame#MetricCard {
+    background: @SURFACE@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CARD_RADIUS@;
+}
+
+QFrame#MetricCard[state="missing"] {
+    background: @SURFACE@;
+    border: @BORDER_WIDTH@ dashed @BORDER_STRONG@;
+}
+
+QLabel#MetricCardTitle {
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_CAPTION@;
+    background: transparent;
+}
+
+QLabel#MetricCardValue {
+    font-family: @MONO_FONT_STACK@;
+    font-size: @FONT_METRIC@;
+    background: transparent;
+}
+
+QLabel#MetricCardValue[state="missing"] {
+    color: @TEXT_DISABLED@;
+    font-style: italic;
+}
+
+QLabel#MetricCardDescription {
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_SMALL@;
+    background: transparent;
+}
+
+/* ---------- Status badge ---------- */
+
+QFrame#StatusBadge {
+    border: @BORDER_WIDTH@ solid transparent;
+    border-radius: @CONTROL_RADIUS@;
+}
+
+QFrame#StatusBadge[status="success"] {
+    background: @SUCCESS_SOFT@;
+}
+
+QFrame#StatusBadge[status="info"] {
+    background: @INFO_SOFT@;
+}
+
+QFrame#StatusBadge[status="warning"] {
+    background: @WARNING_SOFT@;
+}
+
+QFrame#StatusBadge[status="error"] {
+    background: @ERROR_SOFT@;
+}
+
+QFrame#StatusBadge[status="in_progress"] {
+    background: @IN_PROGRESS_SOFT@;
+}
+
+QLabel#StatusBadgeIcon {
+    background: transparent;
+}
+
+QLabel#StatusBadgeText {
+    background: transparent;
+    color: @TEXT_PRIMARY@;
+    font-size: @FONT_CAPTION@;
+}
+
+QLabel#StatusBadgeText[status="success"] {
+    color: @SUCCESS_TEXT@;
+}
+
+QLabel#StatusBadgeText[status="info"] {
+    color: @INFO_TEXT@;
+}
+
+QLabel#StatusBadgeText[status="warning"] {
+    color: @WARNING_TEXT@;
+}
+
+QLabel#StatusBadgeText[status="error"] {
+    color: @ERROR_TEXT@;
+}
+
+QLabel#StatusBadgeText[status="in_progress"] {
+    color: @IN_PROGRESS_TEXT@;
+}
+
+/* ---------- Empty state ---------- */
+
+QFrame#EmptyState {
+    background: transparent;
+    border: @BORDER_WIDTH@ dashed @BORDER_STRONG@;
+    border-radius: @CARD_RADIUS@;
+}
+
+QFrame#EmptyState[variant="error"] {
+    background: @ERROR_SOFT@;
+    border-color: @ERROR_TEXT@;
+}
+
+QLabel#EmptyStateIcon {
+    background: transparent;
+}
+
+QLabel#EmptyStateTitle {
+    font-size: @FONT_TITLE@;
+    font-weight: 600;
+    background: transparent;
+}
+
+QLabel#EmptyStateDescription {
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_SMALL@;
+    background: transparent;
+}
+
+/* ---------- Containers ---------- */
+
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+
+QScrollArea > QWidget > QWidget {
+    background: transparent;
+}
+
+/* ---------- Scroll bars (thin, neutral) ---------- */
+
+QScrollBar:vertical {
+    background: transparent;
+    width: @SPACE_XS@;
+    margin: @SPACE_XXXS@;
+}
+
+QScrollBar::handle:vertical {
+    background: @BORDER@;
+    border-radius: @CONTROL_RADIUS@;
+    min-height: @SPACE_SM@;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: @BORDER_STRONG@;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: transparent;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: @SPACE_XS@;
+    margin: @SPACE_XXXS@;
+}
+
+QScrollBar::handle:horizontal {
+    background: @BORDER@;
+    border-radius: @CONTROL_RADIUS@;
+    min-width: @SPACE_SM@;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: @BORDER_STRONG@;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: transparent;
+}
+
+/* ---------- Main window shell ---------- */
+
+QFrame#NavSidebar {
+    background: @SURFACE_ALT@;
+    border-right: @BORDER_WIDTH@ solid @BORDER@;
+}
+
+QPushButton#NavButton {
+    background: transparent;
+    color: @TEXT_SECONDARY@;
+    border: none;
+    border-radius: @CONTROL_RADIUS@;
+    text-align: left;
+    padding: @SPACE_XXS@ @SPACE_MD@;
+    font-size: @FONT_BODY@;
+    font-weight: 500;
+    min-height: @CONTROL_MIN_HEIGHT@;
+    min-width: 0;
+}
+
+QPushButton#NavButton:hover {
+    background: @NEUTRAL_SOFT@;
+    color: @TEXT_PRIMARY@;
+}
+
+QPushButton#NavButton:focus {
+    border: none;
+    outline: none;
+}
+
+QPushButton#NavButton:checked {
+    background: @PRIMARY_SOFT@;
+    color: @PRIMARY_TEXT@;
+    border-left: @BORDER_WIDTH@ solid @PRIMARY@;
+    font-weight: 600;
+}
+
+QPushButton#NavButton:checked:hover {
+    background: @PRIMARY_SOFT@;
+    color: @PRIMARY_TEXT@;
+}
+
+/* ---------- Top bar ---------- */
+
+QFrame#TopBar {
+    background: @SURFACE@;
+    border-bottom: @BORDER_WIDTH@ solid @BORDER@;
+    min-height: @CONTROL_MIN_HEIGHT@;
+}
+
+QLabel#AppTitle {
+    font-size: @FONT_BODY@;
+    font-weight: 600;
+    background: transparent;
+}
+
+QLabel#PageTitle {
+    font-size: @FONT_HEADER@;
+    font-weight: 600;
+    background: transparent;
+    color: @TEXT_PRIMARY@;
+}
+
+/* ---------- Central content area ---------- */
+
+QFrame#PageStackArea {
+    background: transparent;
+}
+
+QStackedWidget#PageStack {
+    background: transparent;
+}
+
+/* ---------- Page titles ---------- */
+
+QLabel#PageSubtitle {
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_SMALL@;
+    background: transparent;
+}
+
+/* ---------- Dataset workspace ---------- */
+
+QLabel#ImageCanvas {
+    background: @SURFACE@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CONTROL_RADIUS@;
+    min-width: 140px;
+    min-height: 140px;
+}
+
+QWidget#PixelGrid {
+    background: @SURFACE@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CONTROL_RADIUS@;
+    min-width: 140px;
+    min-height: 140px;
+}
+
+QFrame#ConfigPanel {
+    background: @SURFACE@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CARD_RADIUS@;
+}
+
+QLabel#VectorValues {
+    font-family: @MONO_FONT_STACK@;
+    font-size: @FONT_CAPTION@;
+    background: transparent;
+}
+
+QLabel#StatusMessage {
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_SMALL@;
+    background: transparent;
+}
+
+QLabel#Caption {
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_CAPTION@;
+    background: transparent;
+}
+
+QListWidget {
+    background: @SURFACE@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CONTROL_RADIUS@;
+    outline: none;
+}
+
+QListWidget::item {
+    border: none;
+    padding: @SPACE_XXS@ @SPACE_XS@;
+}
+
+QListWidget::item:selected {
+    background: @PRIMARY_SOFT@;
+    color: @PRIMARY_TEXT@;
+}
+
+QListWidget::item:hover {
+    background: @NEUTRAL_SOFT@;
+}
+
+QFrame#EntryRow {
+    background: transparent;
+    border: @BORDER_WIDTH@ solid transparent;
+    border-radius: @CONTROL_RADIUS@;
+}
+
+QFrame#EntryRow:hover {
+    background: @NEUTRAL_SOFT@;
+}
+
+QSpinBox, QComboBox {
+    background: @SURFACE@;
+    color: @TEXT_PRIMARY@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CONTROL_RADIUS@;
+    padding: @SPACE_XXS@ @SPACE_SM@;
+    min-height: @CONTROL_MIN_HEIGHT@;
+}
+
+QSpinBox:focus, QComboBox:focus {
+    border-color: @PRIMARY@;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: @SPACE_XS@;
+}
+
+/* ---------- Matrix view ---------- */
+
+QFrame#MatrixView {
+    background: @SURFACE@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CONTROL_RADIUS@;
+}
+
+QLabel#MatrixDimension {
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_CAPTION@;
+    background: transparent;
+    font-family: @MONO_FONT_STACK@;
+}
+
+QLabel#MatrixLegendLabel {
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_CAPTION@;
+    background: transparent;
+}
+
+QFrame#LegendSwatch {
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CONTROL_RADIUS@;
+    min-width: 20px;
+    min-height: 12px;
+    max-width: 20px;
+    max-height: 12px;
+}
+
+/* ---------- Weight matrix view ---------- */
+
+QFrame#WeightMatrixView {
+    background: @SURFACE@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CARD_RADIUS@;
+}
+
+/* ---------- Formula panel ---------- */
+
+QFrame#FormulaPanel {
+    background: @SURFACE_ALT@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CARD_RADIUS@;
+}
+
+QLabel#FormulaEquation {
+    font-family: @MONO_FONT_STACK@;
+    font-size: @FONT_SMALL@;
+    background: transparent;
+    color: @TEXT_PRIMARY@;
+}
+
+QLabel#FormulaCaption {
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_CAPTION@;
+    background: transparent;
+}
+
+/* ---------- Training state badge ---------- */
+
+QFrame#TrainingStateBadge {
+    border-radius: @CONTROL_RADIUS@;
+    min-height: @CONTROL_MIN_HEIGHT@;
+}
+
+QLabel#TrainingStateText {
+    color: @TEXT_PRIMARY@;
+    font-size: @FONT_BODY@;
+    background: transparent;
+    font-weight: 600;
+}

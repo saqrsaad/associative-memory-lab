@@ -189,8 +189,9 @@ and encoding semantics.
 
 All examples below use the row-vector convention and bipolar encoding unless
 stated otherwise. Dimensions are shown for every input, intermediate result, and
-output. Every value was calculated by hand; no algorithm implementation was used
-to generate these expected results. The same cases are available in
+output; `@` denotes the NumPy matrix-multiplication operator. Every value was
+calculated by hand; no algorithm implementation was used to generate these
+expected results. The same cases are available in
 `tests/fixtures/algorithm_reference_cases.json`.
 
 ### 7.1 Single outer product
