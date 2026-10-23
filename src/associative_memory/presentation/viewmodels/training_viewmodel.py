@@ -31,6 +31,9 @@ from associative_memory.application.dto.training_result import (
     MemoryType,
     TrainingResult,
 )
+from associative_memory.application.services.image_service import (
+    PreprocessingConfig,
+)
 from associative_memory.application.services.training_service import (
     TrainingDataset,
     TrainingError,
@@ -92,6 +95,7 @@ class TrainingViewModel(QObject):
     error_occurred = Signal(str)
     trace_ready = Signal(list)  # list[TrainingTraceStep]
     status_message = Signal(str, StatusKind)
+    encoding_changed = Signal(str)
 
     def __init__(
         self,
@@ -130,6 +134,12 @@ class TrainingViewModel(QObject):
         )
         self._dataset_view_model.memory_type_changed.connect(
             self._on_dataset_memory_type_changed
+        )
+        # React to preprocessing configuration changes: a trained model
+        # built on an older input configuration may no longer be
+        # compatible and must be retrained.
+        self._dataset_view_model.config_changed.connect(
+            self._on_config_changed
         )
 
     # ------------------------------------------------------------------ properties
@@ -183,7 +193,18 @@ class TrainingViewModel(QObject):
 
         Switching to autoassociative clears heteroassociative target
         assumptions in the dataset view model.
+
+        Unsafe while a training run is active: the running worker already
+        captured the memory configuration, so the change is ignored until
+        the run finishes.
         """
+
+        if self._state == TrainingState.TRAINING:
+            self.status_message.emit(
+                "Training in progress; memory-type changes apply after training.",
+                StatusKind.INFO,
+            )
+            return
 
         if value == MEMORY_AUTOASSOCIATIVE:
             new_type = MemoryType.AUTOASSOCIATIVE
@@ -207,7 +228,18 @@ class TrainingViewModel(QObject):
 
         Raises via :class:`TrainingError` semantics (emitted through
         ``error_occurred``) if the encoding name is unsupported.
+
+        Unsafe while a training run is active: the running worker already
+        captured the encoding, so the change is ignored until the run
+        finishes.
         """
+
+        if self._state == TrainingState.TRAINING:
+            self.status_message.emit(
+                "Training in progress; encoding changes apply after training.",
+                StatusKind.INFO,
+            )
+            return
 
         try:
             Encoding(value)
@@ -218,6 +250,7 @@ class TrainingViewModel(QObject):
         self._encoding = value
         self._invalidate_model()
         self._update_readiness()
+        self.encoding_changed.emit(value)
         self.status_message.emit(
             f"Encoding set to {value}. Model requires retraining.",
             StatusKind.INFO,
@@ -591,6 +624,24 @@ class TrainingViewModel(QObject):
         self._update_readiness()
         self.status_message.emit(
             "Dataset changed: existing model is stale and must be retrained.",
+            StatusKind.WARNING,
+        )
+
+    def _on_config_changed(self, config: PreprocessingConfig) -> None:
+        """React to preprocessing configuration changes.
+
+        Stored dataset entries keep their own configuration snapshots, but
+        a change to the active input configuration can invalidate a
+        previously trained model that relied on the previous encoding or
+        dimensions. The trained model is therefore invalidated until the
+        user retrains.
+        """
+
+        self._invalidate_model()
+        self._update_readiness()
+        self.status_message.emit(
+            "Preprocessing settings changed: the existing model may be "
+            "incompatible and must be retrained.",
             StatusKind.WARNING,
         )
 

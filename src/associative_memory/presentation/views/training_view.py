@@ -313,6 +313,7 @@ class TrainingView(QWidget):
         vm.error_occurred.connect(self._on_error)
         vm.trace_ready.connect(self._on_trace_ready)
         vm.status_message.connect(self._on_status_message)
+        vm.encoding_changed.connect(self._on_vm_encoding_changed)
 
         dvm.entries_changed.connect(self._on_dataset_entries_changed)
         dvm.entry_selected.connect(self._on_dataset_entry_selected)
@@ -331,7 +332,9 @@ class TrainingView(QWidget):
         self._memory_combo.blockSignals(False)
 
         self._encoding_combo.blockSignals(True)
-        self._encoding_combo.setCurrentText(vm.encoding)
+        self._encoding_combo.setCurrentIndex(
+            0 if vm.encoding == "binary" else 1
+        )
         self._encoding_combo.blockSignals(False)
 
         self._trace_toggle_config.blockSignals(True)
@@ -346,7 +349,17 @@ class TrainingView(QWidget):
         self._on_state_changed(vm.state)
 
     def _on_state_changed(self, state: TrainingState) -> None:
-        self._train_button.setEnabled(state == TrainingState.READY)
+        # Retraining stays possible from COMPLETED (start a new run) and a
+        # retry stays possible from FAILED (after the cause is addressed);
+        # actions are only disabled while a training run is in progress.
+        self._train_button.setEnabled(
+            state
+            in (
+                TrainingState.READY,
+                TrainingState.COMPLETED,
+                TrainingState.FAILED,
+            )
+        )
         self._cancel_button.setEnabled(state == TrainingState.TRAINING)
 
         if state == TrainingState.COMPLETED:
@@ -409,6 +422,13 @@ class TrainingView(QWidget):
     def _on_encoding_changed(self, index: int) -> None:
         value = self._encoding_combo.itemData(index)
         self._view_model.set_encoding(value)
+
+    def _on_vm_encoding_changed(self, value: str) -> None:
+        """Keep the encoding combo in sync when the view model changes."""
+
+        self._encoding_combo.blockSignals(True)
+        self._encoding_combo.setCurrentIndex(0 if value == "binary" else 1)
+        self._encoding_combo.blockSignals(False)
 
     # ------------------------------------------------------------------ target assignment
 

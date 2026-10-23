@@ -82,6 +82,47 @@ def test_training_view_rejects_empty_dataset(qt_app: QApplication) -> None:
     assert view._view_model.state == TrainingState.NOT_READY
 
 
+def test_training_view_retry_after_failure_is_usable(qt_app: QApplication) -> None:
+    view = TrainingView()
+    view.show()
+
+    dvm = view._dataset_view_model
+    entry = _make_entry(
+        dvm, "e1", np.array([1.0, -1.0, 1.0], dtype=np.float64), MEMORY_AUTOASSOCIATIVE
+    )
+    dvm._entries = [entry]
+    dvm.entries_changed.emit()
+
+    # The default training encoding is binary; -1 is not a valid binary
+    # value, so training must fail with a clear error.
+    view._view_model.set_encoding("binary")
+    view._refresh_state()
+    assert view._view_model.state == TrainingState.READY
+
+    view._train_button.click()
+    _wait_until_not_training(view, qt_app)
+    assert view._view_model.state == TrainingState.FAILED
+
+    # Drain the failed worker thread before retrying.
+    deadline = time.time() + 5.0
+    while view._view_model._thread is not None and time.time() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.01)
+
+    # The retry path must stay usable after a failed run.
+    assert view._train_button.isEnabled()
+
+    # Correct the configuration and retry: training must then complete.
+    view._view_model.set_encoding("bipolar")
+    view._refresh_state()
+    assert view._view_model.state == TrainingState.READY
+
+    view._train_button.click()
+    _wait_until_not_training(view, qt_app)
+    assert view._view_model.state == TrainingState.COMPLETED
+    assert view._view_model.current_result is not None
+
+
 def test_training_view_memory_type_combo(qt_app: QApplication) -> None:
     view = TrainingView()
     view.show()
@@ -98,6 +139,21 @@ def test_training_view_encoding_combo(qt_app: QApplication) -> None:
     assert view._encoding_combo.currentText() == "Binary (0/1)"
     view._encoding_combo.setCurrentIndex(1)
     assert view._view_model.encoding == "bipolar"
+
+
+def test_training_view_encoding_combo_tracks_viewmodel(qt_app: QApplication) -> None:
+    view = TrainingView()
+    view.show()
+
+    assert view._view_model.encoding == "binary"
+    assert view._encoding_combo.currentText() == "Binary (0/1)"
+
+    # Viewmodel-driven encoding updates must be reflected in the combo.
+    view._view_model.set_encoding("bipolar")
+
+    assert view._view_model.encoding == "bipolar"
+    assert view._encoding_combo.currentIndex() == 1
+    assert view._encoding_combo.currentText() == "Bipolar (-1/+1)"
 
 
 def test_training_view_shows_weight_matrix(qt_app: QApplication) -> None:
@@ -124,6 +180,42 @@ def test_training_view_shows_weight_matrix(qt_app: QApplication) -> None:
     matrix_view = view._weight_matrix_view
     assert matrix_view.matrix() is not None
     assert matrix_view.matrix().shape == (3, 3)
+
+
+def test_training_view_allows_retraining_after_completion(qt_app: QApplication) -> None:
+    dvm = DatasetViewModel()
+    dvm.set_memory_type(MEMORY_AUTOASSOCIATIVE)
+
+    view = TrainingView(dataset_view_model=dvm)
+    view.show()
+
+    entry = _make_entry(
+        dvm, "e1", np.array([1.0, -1.0, 1.0], dtype=np.float64), MEMORY_AUTOASSOCIATIVE
+    )
+    dvm._entries = [entry]
+    dvm.entries_changed.emit()
+
+    view._view_model.set_encoding("bipolar")
+    view._refresh_state()
+
+    view._train_button.click()
+    _wait_until_not_training(view, qt_app)
+    assert view._view_model.state == TrainingState.COMPLETED
+    assert view._view_model.current_result is not None
+    assert view._train_button.isEnabled()
+
+    # Drain worker-thread shutdown before starting the next training run.
+    deadline = time.time() + 5.0
+    while view._view_model._thread is not None and time.time() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.01)
+
+    # A completed run must allow starting another training run without an
+    # unrelated dataset or configuration change.
+    view._train_button.click()
+    _wait_until_not_training(view, qt_app)
+    assert view._view_model.state == TrainingState.COMPLETED
+    assert view._view_model.current_result is not None
 
 
 def _wait_until_not_training(

@@ -8,6 +8,7 @@ import numpy as np
 from PySide6.QtCore import QThread
 from PySide6.QtWidgets import QApplication
 
+from associative_memory.algorithms.encoding import Encoding
 from associative_memory.application.dto.training_result import MemoryType
 from associative_memory.infrastructure.image_preprocessor import (
     PreprocessingResult,
@@ -253,6 +254,68 @@ def test_encoding_change_invalidates_a_trained_model() -> None:
     vm.set_encoding("binary")
     assert vm.state is TrainingState.READY
     assert vm.current_result is None
+
+
+def test_configuration_changes_during_training_are_ignored(qt_app: QApplication) -> None:
+    """Memory-type and encoding switches must not affect a running job."""
+
+    from associative_memory.application.services.training_service import (
+        TrainingService,
+    )
+
+    class SlowTrainingService(TrainingService):
+        """Training service that sleeps to simulate long-running work."""
+
+        def train(self, dataset, *, encoding, trace=False):
+            time.sleep(0.2)  # Simulate long-running operation
+            return super().train(dataset, encoding=encoding, trace=trace)
+
+    vm = TrainingViewModel(training_service=SlowTrainingService())
+    dvm = vm._dataset_view_model
+
+    dvm.set_memory_type(MEMORY_AUTOASSOCIATIVE)
+    entry = _make_entry(dvm, "e1", np.array([1.0, -1.0], dtype=np.float64), MEMORY_AUTOASSOCIATIVE)
+    dvm._entries = [entry]
+    dvm.entries_changed.emit()
+
+    vm.set_encoding("bipolar")
+    vm.train_async()
+    assert vm.state == TrainingState.TRAINING
+
+    vm.set_memory_type(MEMORY_HETEROASSOCIATIVE)
+    vm.set_encoding("binary")
+
+    assert vm.state == TrainingState.TRAINING
+    assert vm.memory_type == MemoryType.AUTOASSOCIATIVE
+    assert vm.encoding == "bipolar"
+
+    # Drain the worker thread so the test exits with a stopped thread.
+    deadline = time.time() + 5.0
+    while vm._thread is not None and time.time() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.01)
+
+
+def test_config_change_invalidates_trained_model() -> None:
+    vm = TrainingViewModel()
+    dvm = vm._dataset_view_model
+
+    dvm.set_memory_type(MEMORY_AUTOASSOCIATIVE)
+    entry = _make_entry(dvm, "e1", np.array([1.0, -1.0], dtype=np.float64), MEMORY_AUTOASSOCIATIVE)
+    dvm._entries = [entry]
+    dvm.entries_changed.emit()
+
+    vm.set_encoding("bipolar")
+    vm.train()
+    assert vm.state == TrainingState.COMPLETED
+    assert vm.current_result is not None
+
+    # A preprocessing configuration change must invalidate the trained
+    # model so the user knows retraining is required.
+    assert dvm.update_config(encoding=Encoding.BIPOLAR) is True
+
+    assert vm.current_result is None
+    assert vm.state == TrainingState.READY
 
 
 def test_large_matrix_warning_is_emitted_before_training() -> None:
