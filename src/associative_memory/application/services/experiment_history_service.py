@@ -35,6 +35,7 @@ from associative_memory.application.dto.experiment_comparison import (
     ExperimentComparison,
     WeightComparison,
 )
+from associative_memory.application.dto.recall_result import RecallResult
 from associative_memory.application.dto.saved_experiment import (
     DEFAULT_EXPERIMENT_NAME,
     LoadedExperiment,
@@ -45,7 +46,6 @@ from associative_memory.application.dto.saved_experiment import (
     StoredRecallRecord,
     StoredTraining,
 )
-from associative_memory.application.dto.recall_result import RecallResult
 from associative_memory.application.dto.training_result import TrainingResult
 from associative_memory.application.interfaces.model_repository import (
     ModelRepository,

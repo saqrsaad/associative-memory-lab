@@ -42,8 +42,13 @@ from associative_memory.presentation.viewmodels.dataset_viewmodel import (
     DatasetEntry,
     DatasetViewModel,
 )
+from associative_memory.presentation.widgets.status import StatusKind
 
 _LOGGER = logging.getLogger(__name__)
+
+#: Weight-matrix memory (including the trace even if requested) above
+#: which the view model warns the user before the allocation happens.
+_LARGE_MATRIX_WARNING_BYTES = 256 * 1024 * 1024
 
 
 class TrainingState(Enum):
@@ -86,7 +91,7 @@ class TrainingViewModel(QObject):
     result_ready = Signal(object)  # TrainingResult
     error_occurred = Signal(str)
     trace_ready = Signal(list)  # list[TrainingTraceStep]
-    status_message = Signal(str)
+    status_message = Signal(str, StatusKind)
 
     def __init__(
         self,
@@ -98,12 +103,26 @@ class TrainingViewModel(QObject):
         self._dataset_view_model = dataset_view_model or DatasetViewModel()
         self._training_service = training_service or TrainingService()
 
-        self._memory_type = MemoryType.AUTOASSOCIATIVE
+        # Adopt the dataset view model's current memory type. The
+        # memory_type_changed signal that announced earlier switches fired
+        # before this view model existed, so the type must be read here
+        # instead of relying on the signal.
+        self._memory_type = (
+            MemoryType.HETEROASSOCIATIVE
+            if self._dataset_view_model.memory_type == MEMORY_HETEROASSOCIATIVE
+            else MemoryType.AUTOASSOCIATIVE
+        )
         self._encoding = "binary"
         self._trace_enabled = False
         self._state = TrainingState.NOT_READY
         self._current_result: TrainingResult | None = None
         self._error_message: str | None = None
+
+        self._thread: QThread | None = None
+        self._worker: _TrainingWorker | None = None
+        # Set by cancel_training(); consumed when the finished result
+        # arrives so a canceled run never publishes its model.
+        self._cancel_requested = False
 
         # React to dataset changes: invalidate the trained model.
         self._dataset_view_model.entries_changed.connect(
@@ -179,7 +198,8 @@ class TrainingViewModel(QObject):
         self._invalidate_model()
         self._update_readiness()
         self.status_message.emit(
-            f"Memory type set to {value}. Model requires retraining."
+            f"Memory type set to {value}. Model requires retraining.",
+            StatusKind.INFO,
         )
 
     def set_encoding(self, value: str) -> None:
@@ -199,7 +219,8 @@ class TrainingViewModel(QObject):
         self._invalidate_model()
         self._update_readiness()
         self.status_message.emit(
-            f"Encoding set to {value}. Model requires retraining."
+            f"Encoding set to {value}. Model requires retraining.",
+            StatusKind.INFO,
         )
 
     def set_trace_enabled(self, enabled: bool) -> None:
@@ -224,17 +245,23 @@ class TrainingViewModel(QObject):
         if pairs is None:
             return  # error already reported
 
+        first_source, first_target = pairs[0]
+        self._warn_about_matrix_size(
+            len(first_source), len(first_target), len(pairs), self._trace_enabled
+        )
+
         dataset = TrainingDataset(
             patterns=tuple(pairs),
             memory_type=self._memory_type,
             name="dataset-workspace",
         )
 
+        self._cancel_requested = False
         self._state = TrainingState.TRAINING
         self._error_message = None
         self._current_result = None
         self.state_changed.emit(self._state)
-        self.status_message.emit("Training in progress…")
+        self.status_message.emit("Training in progress…", StatusKind.IN_PROGRESS)
 
         try:
             result = self._training_service.train(
@@ -248,7 +275,7 @@ class TrainingViewModel(QObject):
             self._current_result = None
             self.state_changed.emit(self._state)
             self.error_occurred.emit(str(exc))
-            self.status_message.emit(f"Training failed: {str(exc)}")
+            self.status_message.emit(f"Training failed: {str(exc)}", StatusKind.ERROR)
             return
 
         self._state = TrainingState.COMPLETED
@@ -262,7 +289,8 @@ class TrainingViewModel(QObject):
 
         self.status_message.emit(
             f"Training complete: {result.pair_count} pair(s), "
-            f"{result.input_dimension}x{result.output_dimension} matrix."
+            f"{result.input_dimension}x{result.output_dimension} matrix.",
+            StatusKind.SUCCESS,
         )
 
     def train_async(self) -> None:
@@ -279,17 +307,23 @@ class TrainingViewModel(QObject):
         if pairs is None:
             return
 
+        first_source, first_target = pairs[0]
+        self._warn_about_matrix_size(
+            len(first_source), len(first_target), len(pairs), self._trace_enabled
+        )
+
         dataset = TrainingDataset(
             patterns=tuple(pairs),
             memory_type=self._memory_type,
             name="dataset-workspace",
         )
 
+        self._cancel_requested = False
         self._state = TrainingState.TRAINING
         self._error_message = None
         self._current_result = None
         self.state_changed.emit(self._state)
-        self.status_message.emit("Training in progress…")
+        self.status_message.emit("Training in progress…", StatusKind.IN_PROGRESS)
 
         self._thread = QThread()
         self._worker = _TrainingWorker(
@@ -303,11 +337,40 @@ class TrainingViewModel(QObject):
         self._thread.started.connect(self._worker.run)
         self._worker.finished.connect(self._on_training_finished)
         self._worker.error.connect(self._on_training_error)
+        # Both outcomes must stop the worker thread and release the worker
+        # object; otherwise a failed run leaks a running QThread.
         self._worker.finished.connect(self._thread.quit)
         self._worker.finished.connect(self._worker.deleteLater)
+        self._worker.error.connect(self._thread.quit)
+        self._worker.error.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._on_thread_finished)
         self._thread.finished.connect(self._thread.deleteLater)
 
         self._thread.start()
+
+    def _warn_about_matrix_size(
+        self, source_len: int, target_len: int, pair_count: int, trace: bool
+    ) -> None:
+        """Warn before training allocates a very large weight matrix.
+
+        The dense float64 matrix costs ``source_len * target_len * 8``
+        bytes, and an enabled trace stores one equally sized contribution
+        per pair. Above :data:`_LARGE_MATRIX_WARNING_BYTES` the user is
+        told the expected size before the allocation happens.
+        """
+
+        weight_bytes = int(source_len) * int(target_len) * 8
+        total_bytes = weight_bytes * ((1 + pair_count) if trace else 1)
+        if total_bytes <= _LARGE_MATRIX_WARNING_BYTES:
+            return
+
+        trace_note = " plus the per-pair trace" if trace and pair_count else ""
+        self.status_message.emit(
+            f"Large weight matrix ahead: about {_format_bytes(total_bytes)} "
+            f"of memory for {source_len}x{target_len} values{trace_note}. "
+            "Training may need several seconds.",
+            StatusKind.WARNING,
+        )
 
     def cancel_training(self) -> None:
         """Request cancellation of an in-progress training run.
@@ -404,12 +467,10 @@ class TrainingViewModel(QObject):
                 pairs.append((vec, vec.copy()))
         else:
             # Heteroassociative: each entry's source is its vector; the
-            # target is looked up by target_label (entry_id reference).
-            label_to_vector: dict[str, np.ndarray] = {}
-            for entry in entries:
-                if entry.target_label is not None:
-                    label_to_vector[entry.target_label] = vectors[entry.entry_id]
-
+            # target is the vector of the dataset entry referenced by
+            # ``target_label`` (a reference to another entry's id, the
+            # same resolution the recall workspace applies when picking
+            # an expected target).
             for entry in entries:
                 source = vectors[entry.entry_id]
                 target_label = entry.target_label
@@ -419,13 +480,13 @@ class TrainingViewModel(QObject):
                         f"target label assigned."
                     )
                     return None
-                if target_label not in label_to_vector:
+                if target_label not in vectors:
                     self._set_error(
                         f"Heteroassociative entry {entry.entry_id} references "
                         f"unknown target {target_label!r}."
                     )
                     return None
-                pairs.append((source, label_to_vector[target_label].copy()))
+                pairs.append((source, vectors[target_label].copy()))
 
         # Validate dimensions are consistent.
         source_lengths = {len(p[0]) for p in pairs}
@@ -446,6 +507,22 @@ class TrainingViewModel(QObject):
     def _on_training_finished(self, result: TrainingResult) -> None:
         """Handle successful training completion (async path)."""
 
+        if self._cancel_requested:
+            self._cancel_requested = False
+            self._error_message = None
+            self._current_result = None
+            # _update_readiness ignores the state while it is TRAINING (it
+            # protects in-flight runs from dataset changes), so the
+            # post-cancel state is computed directly here.
+            entries = self._dataset_view_model.entries
+            self._state = TrainingState.READY if entries else TrainingState.NOT_READY
+            self.state_changed.emit(self._state)
+            self.status_message.emit(
+                "Training canceled: the finished result was discarded.",
+                StatusKind.WARNING,
+            )
+            return
+
         self._state = TrainingState.COMPLETED
         self._error_message = None
         self._current_result = result
@@ -457,10 +534,9 @@ class TrainingViewModel(QObject):
 
         self.status_message.emit(
             f"Training complete: {result.pair_count} pair(s), "
-            f"{result.input_dimension}x{result.output_dimension} matrix."
+            f"{result.input_dimension}x{result.output_dimension} matrix.",
+            StatusKind.SUCCESS,
         )
-
-        self._cleanup_thread()
 
     def _on_training_error(self, message: str) -> None:
         """Handle training failure (async path)."""
@@ -470,16 +546,19 @@ class TrainingViewModel(QObject):
         self._current_result = None
         self.state_changed.emit(self._state)
         self.error_occurred.emit(message)
-        self.status_message.emit(f"Training failed: {message}")
-        self._cleanup_thread()
+        self.status_message.emit(f"Training failed: {message}", StatusKind.ERROR)
 
-    def _cleanup_thread(self) -> None:
-        """Release worker thread resources."""
+    def _on_thread_finished(self) -> None:
+        """Release worker thread references after the thread has ended.
 
-        if self._worker is not None:
-            self._worker = None
-        if self._thread is not None:
-            self._thread = None
+        Runs on the main thread through the queued ``QThread.finished``
+        connection. Releasing the references earlier (for example while
+        handling the training result) would destroy a ``QThread`` whose
+        event loop may still be running, which crashes the process.
+        """
+
+        self._worker = None
+        self._thread = None
 
     def _invalidate_model(self) -> None:
         """Mark the current model as stale due to config/dataset changes."""
@@ -511,7 +590,8 @@ class TrainingViewModel(QObject):
         self._invalidate_model()
         self._update_readiness()
         self.status_message.emit(
-            "Dataset changed: existing model is stale and must be retrained."
+            "Dataset changed: existing model is stale and must be retrained.",
+            StatusKind.WARNING,
         )
 
     def _on_dataset_memory_type_changed(self, value: str) -> None:
@@ -530,7 +610,7 @@ class TrainingViewModel(QObject):
         self._state = TrainingState.FAILED
         self.state_changed.emit(self._state)
         self.error_occurred.emit(message)
-        self.status_message.emit(message)
+        self.status_message.emit(message, StatusKind.ERROR)
 
 
 class _TrainingWorker(QObject):
@@ -567,3 +647,14 @@ class _TrainingWorker(QObject):
         except Exception as exc:  # presentation boundary: never crash UI
             _LOGGER.exception("Unexpected training failure")
             self.error.emit(f"Unexpected training failure: {exc}")
+
+
+def _format_bytes(count: int) -> str:
+    """Human-readable byte count, e.g. ``2.1 GB``."""
+
+    size = float(count)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024.0:
+            return f"{size:,.1f} {unit}"
+        size /= 1024.0
+    return f"{size:,.1f} TB"

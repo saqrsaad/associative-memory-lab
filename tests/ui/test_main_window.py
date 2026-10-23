@@ -296,3 +296,38 @@ def test_all_presentation_modules_import_cleanly(qt_app):
         "associative_memory.main",
     ):
         assert importlib.import_module(module_name) is not None
+
+
+# ------------------------------------------------ user data during navigation
+
+
+def test_navigation_preserves_user_data_across_pages(qt_app, tmp_path):
+    """Dataset entries and training readiness survive ordinary navigation."""
+
+    import numpy as np
+    from PIL import Image
+
+    pattern_path = tmp_path / "pattern.png"
+    Image.fromarray(np.zeros((6, 6), dtype=np.uint8)).save(pattern_path)
+
+    window = MainWindow()
+    dvm = window._dataset_view_model
+    dvm.import_image(pattern_path)
+    dvm.add_entry()
+    assert len(dvm.entries) == 1
+    assert window._training_view_model.is_ready
+
+    button_by_label = {
+        button.text(): button
+        for button in window.findChildren(QPushButton, "NavButton")
+    }
+    button_by_label[item_for_label(NavigationDestination.TRAINING)].click()
+    button_by_label[item_for_label(NavigationDestination.DASHBOARD)].click()
+    button_by_label[
+        item_for_label(NavigationDestination.IMAGE_DATASET)
+    ].click()
+
+    assert len(dvm.entries) == 1
+    assert dvm.entries[0].config.width == 16
+    assert dvm.entries[0].config.height == 16
+    assert window._training_view_model.is_ready is True

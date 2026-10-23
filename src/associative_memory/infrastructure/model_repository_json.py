@@ -43,7 +43,7 @@ import shutil
 import zipfile
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -153,7 +153,7 @@ class JsonModelRepository(ModelRepository):
                 f"An experiment with id {experiment_id!r} already exists."
             )
 
-        created_at = datetime.now(timezone.utc).isoformat()
+        created_at = datetime.now(UTC).isoformat()
         data = _ManifestData(
             schema_version=SCHEMA_VERSION,
             experiment_id=experiment_id,

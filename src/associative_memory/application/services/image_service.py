@@ -9,7 +9,6 @@ dependencies, so workflows can be exercised independently of the interface.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Union
 
 from PIL import Image
 
@@ -47,7 +46,7 @@ __all__ = [
     "preprocess_image",
 ]
 
-_SupportedPath = Union[str, Path]
+_SupportedPath = str | Path
 
 
 class ImageService:

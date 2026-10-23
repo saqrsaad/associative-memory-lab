@@ -6,6 +6,7 @@ import time
 
 import numpy as np
 from PySide6.QtCore import QThread
+from PySide6.QtWidgets import QApplication
 
 from associative_memory.application.dto.training_result import MemoryType
 from associative_memory.infrastructure.image_preprocessor import (
@@ -22,6 +23,7 @@ from associative_memory.presentation.viewmodels.training_viewmodel import (
     TrainingViewModel,
     _TrainingWorker,
 )
+from associative_memory.presentation.widgets.status import StatusKind
 
 
 def test_training_viewmodel_defaults() -> None:
@@ -217,6 +219,10 @@ def test_training_viewmodel_dataset_change_invalidates_model() -> None:
     dvm._entries = [entry]
     dvm.entries_changed.emit()
 
+    # The fabricated vector is bipolar-valued; declare bipolar so the
+    # encoding matches the pattern values (as the real preprocessor would).
+    vm.set_encoding("bipolar")
+
     vm.train()
     assert vm.state == TrainingState.COMPLETED
 
@@ -226,7 +232,48 @@ def test_training_viewmodel_dataset_change_invalidates_model() -> None:
     assert vm.current_result is None
 
 
-def test_training_viewmodel_remains_responsive_during_training() -> None:
+def test_encoding_change_invalidates_a_trained_model() -> None:
+    vm = TrainingViewModel()
+    dvm = vm._dataset_view_model
+
+    dvm.set_memory_type(MEMORY_AUTOASSOCIATIVE)
+    entry = _make_entry(
+        dvm, "e1", np.array([1.0, -1.0], dtype=np.float64), MEMORY_AUTOASSOCIATIVE
+    )
+    dvm._entries = [entry]
+    dvm.entries_changed.emit()
+
+    vm.set_encoding("bipolar")
+    vm.train()
+    assert vm.state == TrainingState.COMPLETED
+
+    # Switching the encoding makes the stored model incompatible: the
+    # trained result must be dropped. With entries still present the
+    # state becomes READY (retrainable), never COMPLETED.
+    vm.set_encoding("binary")
+    assert vm.state is TrainingState.READY
+    assert vm.current_result is None
+
+
+def test_large_matrix_warning_is_emitted_before_training() -> None:
+    vm = TrainingViewModel()
+    messages = []
+    vm.status_message.connect(lambda message, kind: messages.append((message, kind)))
+
+    # A 128x128 grid with a two-pattern trace would allocate about 2.2 GB.
+    vm._warn_about_matrix_size(16384, 16384, 2, True)
+    assert messages and messages[0][1] is StatusKind.WARNING
+    assert "GB" in messages[0][0]
+
+    # The default 16x16 grid stays far below the warning threshold.
+    messages.clear()
+    vm._warn_about_matrix_size(256, 256, 8, False)
+    assert messages == []
+
+
+def test_training_viewmodel_remains_responsive_during_training(
+    qt_app: QApplication,
+) -> None:
     """GUI state transitions to TRAINING immediately (not blocked)."""
 
     from associative_memory.application.services.training_service import (
@@ -249,6 +296,10 @@ def test_training_viewmodel_remains_responsive_during_training() -> None:
     dvm._entries = [entry]
     dvm.entries_changed.emit()
 
+    # The fabricated vector is bipolar-valued; declare bipolar so the
+    # encoding matches the pattern values (as the real preprocessor would).
+    vm.set_encoding("bipolar")
+
     assert vm.state == TrainingState.READY
 
     # Start training asynchronously - this runs on a background thread
@@ -257,21 +308,125 @@ def test_training_viewmodel_remains_responsive_during_training() -> None:
     # Immediately after starting, state should be TRAINING (GUI not blocked)
     assert vm.state == TrainingState.TRAINING
 
-    # Wait for completion
+    # Wait for completion. The finished signal is queued from the worker
+    # thread to the main thread, so the wait must process Qt events.
     deadline = time.time() + 5.0
     while vm.state == TrainingState.TRAINING and time.time() < deadline:
+        qt_app.processEvents()
         time.sleep(0.01)
 
     assert vm.state == TrainingState.COMPLETED
     assert vm.current_result is not None
+
+    # Drain the remaining thread-shutdown events (final delivery of the
+    # worker results already happened; the queued quit of the worker thread
+    # still needs processing) so the test exits with a fully stopped thread.
+    deadline = time.time() + 5.0
+    while vm._thread is not None and time.time() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.01)
+
+    assert vm._thread is None
+
+
+def test_training_viewmodel_reports_worker_errors(qt_app: QApplication) -> None:
+    """A failing background worker surfaces a clear, handled failure."""
+
+    from associative_memory.application.services.training_service import (
+        TrainingService,
+    )
+
+    class FailingTrainingService(TrainingService):
+        """Training service that fails after being started."""
+
+        def train(self, dataset, *, encoding, trace=False):
+            raise RuntimeError("boom at train time")
+
+    vm = TrainingViewModel(training_service=FailingTrainingService())
+    dvm = vm._dataset_view_model
+
+    dvm.set_memory_type(MEMORY_AUTOASSOCIATIVE)
+    entry = _make_entry(dvm, "e1", np.array([1.0, -1.0]), MEMORY_AUTOASSOCIATIVE)
+    dvm._entries = [entry]
+    dvm.entries_changed.emit()
+    vm.set_encoding("bipolar")
+
+    errors: list[str] = []
+    vm.error_occurred.connect(errors.append)
+    vm.train_async()
+
+    deadline = time.time() + 5.0
+    while vm.state == TrainingState.TRAINING and time.time() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.01)
+
+    assert vm.state == TrainingState.FAILED
+    assert errors and "Unexpected training failure: boom at train time" in errors[0]
+    assert vm.current_result is None
+
+    # The worker thread is released after the failure path completes.
+    deadline = time.time() + 5.0
+    while vm._thread is not None and time.time() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.01)
+
+    assert vm._thread is None
+
+
+def test_training_viewmodel_cancel_discards_the_finished_result(
+    qt_app: QApplication,
+) -> None:
+    """Cancellation never publishes the model the user pressed Cancel on."""
+
+    from associative_memory.application.services.training_service import (
+        TrainingService,
+    )
+
+    class SlowTrainingService(TrainingService):
+        def train(self, dataset, *, encoding, trace=False):
+            time.sleep(0.3)  # Leave a generous window to press Cancel.
+            return super().train(dataset, encoding=encoding, trace=trace)
+
+    vm = TrainingViewModel(training_service=SlowTrainingService())
+    dvm = vm._dataset_view_model
+
+    dvm.set_memory_type(MEMORY_AUTOASSOCIATIVE)
+    entry = _make_entry(dvm, "e1", np.array([1.0, -1.0]), MEMORY_AUTOASSOCIATIVE)
+    dvm._entries = [entry]
+    dvm.entries_changed.emit()
+    vm.set_encoding("bipolar")
+
+    messages = []
+    vm.status_message.connect(lambda message, kind: messages.append(message))
+    vm.train_async()
+    assert vm.state == TrainingState.TRAINING
+
+    vm.cancel_training()
+
+    deadline = time.time() + 5.0
+    while vm.state == TrainingState.TRAINING and time.time() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.01)
+
+    assert vm.state is TrainingState.READY
+    assert vm.current_result is None
+    assert any("canceled" in message for message in messages)
+
+    # Drain the remaining thread-shutdown events.
+    deadline = time.time() + 5.0
+    while vm._thread is not None and time.time() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.01)
+
+    assert vm._thread is None
 
 
 def test_training_worker_runs_on_separate_thread(qt_app) -> None:
     """Verify the training worker moves to a QThread."""
 
     from associative_memory.application.services.training_service import (
-        TrainingService,
         TrainingDataset,
+        TrainingService,
     )
 
     service = TrainingService()

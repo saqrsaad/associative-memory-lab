@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import numpy as np
 from PySide6.QtWidgets import QApplication
 
@@ -49,12 +51,19 @@ def test_training_view_heteroassociative_training(qt_app: QApplication) -> None:
     dvm._entries = [entry1, entry2]
     dvm.entries_changed.emit()
 
+    # The fabricated vectors are bipolar-valued; declare bipolar so the
+    # encoding matches the pattern values (as the real preprocessor would).
+    view._view_model.set_encoding("bipolar")
+
     view._refresh_state()
     assert view._view_model.state == TrainingState.READY
     assert view._train_button.isEnabled()
 
     view._train_button.click()
 
+    # The Train button runs training asynchronously; wait for the queued
+    # result to be delivered to this thread.
+    _wait_until_not_training(view, qt_app)
     assert view._view_model.state == TrainingState.COMPLETED
     result = view._view_model.current_result
     assert result is not None
@@ -103,13 +112,30 @@ def test_training_view_shows_weight_matrix(qt_app: QApplication) -> None:
     dvm._entries = [entry]
     dvm.entries_changed.emit()
 
+    # The fabricated vector is bipolar-valued; declare bipolar so the
+    # encoding matches the pattern values (as the real preprocessor would).
+    view._view_model.set_encoding("bipolar")
+
     view._refresh_state()
     view._train_button.click()
 
+    _wait_until_not_training(view, qt_app)
     assert view._view_model.state == TrainingState.COMPLETED
     matrix_view = view._weight_matrix_view
     assert matrix_view.matrix() is not None
     assert matrix_view.matrix().shape == (3, 3)
+
+
+def _wait_until_not_training(
+    view: TrainingView, qt_app: QApplication, timeout_s: float = 5.0
+) -> None:
+    """Process Qt events until the asynchronous training state leaves TRAINING."""
+
+    deadline = time.time() + timeout_s
+    vm = view._view_model
+    while vm.state == TrainingState.TRAINING and time.time() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.01)
 
 
 def _make_entry(

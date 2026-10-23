@@ -28,7 +28,7 @@ def test_weight_matrix_view_dim_label_updates(qt_app: QApplication) -> None:
     matrix = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float64)
     view.set_matrix(matrix)
 
-    assert "2x3" in view._dim_label.text()
+    assert "2×3" in view._dim_label.text()
     assert "6 elements" in view._dim_label.text()
 
 

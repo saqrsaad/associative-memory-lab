@@ -29,13 +29,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Union
 
 from PIL import Image
 
 SUPPORTED_IMAGE_FORMATS = frozenset({"PNG", "JPEG", "BMP"})
 
-_SupportedPath = Union[str, Path]
+_SupportedPath = str | Path
 
 # Error types raised by Pillow while opening or decoding an image file.
 # ``UnidentifiedImageError`` is a subclass of ``OSError``, so it is handled

@@ -1,10 +1,11 @@
 """Experiment-history view model.
 
 Coordinates the saved-experiment list, opening, deletion, and comparison
-through :class:`associative_memory.application.services.experiment_history_service.ExperimentHistoryService`.
-The view model performs no file or numerical work: storage stays behind
-the application repository interface, and comparison rows arrive ready
-formatted from the service with explicit availability notes.
+through :class:`associative_memory.application.services.\
+experiment_history_service.ExperimentHistoryService`. The view model
+performs no file or numerical work: storage stays behind the application
+repository interface, and comparison rows arrive ready formatted from the
+service with explicit availability notes.
 """
 
 from __future__ import annotations

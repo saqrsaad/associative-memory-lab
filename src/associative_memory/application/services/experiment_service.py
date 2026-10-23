@@ -25,7 +25,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Union
 
 from associative_memory.algorithms.encoding import Encoding
 from associative_memory.application.dto.experiment_report import (
@@ -49,7 +48,7 @@ from associative_memory.infrastructure.image_preprocessor import (
     PreprocessingConfig,
 )
 
-_SupportedPath = Union[str, Path]
+_SupportedPath = str | Path
 _MEMORY_TYPE_OPTIONS = ", ".join(member.value for member in MemoryType)
 
 

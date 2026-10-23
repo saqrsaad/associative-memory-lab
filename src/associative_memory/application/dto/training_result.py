@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from numpy.typing import NDArray
 
@@ -20,7 +20,7 @@ from associative_memory.application.dto._arrays import (
 )
 
 
-class MemoryType(str, Enum):
+class MemoryType(StrEnum):
     """The two supported associative-memory modes (kept distinct by design)."""
 
     AUTOASSOCIATIVE = "autoassociative"

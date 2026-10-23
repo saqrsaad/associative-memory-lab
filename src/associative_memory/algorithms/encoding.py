@@ -8,14 +8,14 @@ inferred from the numeric values of a vector.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from enum import Enum
+from enum import StrEnum
 from types import MappingProxyType
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 
-class Encoding(str, Enum):
+class Encoding(StrEnum):
     """Supported pattern encodings."""
 
     BINARY = "binary"

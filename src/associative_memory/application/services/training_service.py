@@ -12,8 +12,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from numpy.typing import ArrayLike
 import numpy as np
+from numpy.typing import ArrayLike
 
 from associative_memory.algorithms.autoassociative import (
     AutoassociativeMemory,

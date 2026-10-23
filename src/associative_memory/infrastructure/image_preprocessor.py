@@ -69,7 +69,7 @@ of the caller's image cannot invalidate a stored result.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, StrEnum
 from pathlib import Path
 
 import numpy as np
@@ -83,28 +83,28 @@ from associative_memory.algorithms.encoding import (
 )
 
 
-class ForegroundPolarity(str, Enum):
+class ForegroundPolarity(StrEnum):
     """Which grayscale side of the threshold is the foreground (ON)."""
 
     DARK_IS_ON = "dark_is_on"
     LIGHT_IS_ON = "light_is_on"
 
 
-class GrayscaleMethod(str, Enum):
+class GrayscaleMethod(StrEnum):
     """Supported grayscale conversion methods."""
 
     LUMINANCE_601 = "luminance_601"
     AVERAGE = "average"
 
 
-class ResizeMode(str, Enum):
+class ResizeMode(StrEnum):
     """How the image is resized to the target rectangle."""
 
     PRESERVE_ASPECT = "preserve_aspect"
     STRETCH = "stretch"
 
 
-class FlatteningOrder(str, Enum):
+class FlatteningOrder(StrEnum):
     """Vector flattening order for the encoded matrix."""
 
     ROW_MAJOR = "row_major"

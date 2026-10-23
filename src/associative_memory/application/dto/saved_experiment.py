@@ -46,8 +46,8 @@ from associative_memory.application.dto.training_result import (
     TrainingResult,
 )
 from associative_memory.infrastructure.image_preprocessor import (
-    ForegroundPolarity,
     FlatteningOrder,
+    ForegroundPolarity,
     GrayscaleMethod,
     PreprocessingConfig,
     ResizeMode,

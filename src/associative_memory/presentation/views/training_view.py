@@ -111,7 +111,9 @@ class TrainingView(QWidget):
         self._train_button = QPushButton("Train Memory", self)
         self._train_button.setMinimumWidth(140)
         self._train_button.setEnabled(False)
-        self._train_button.clicked.connect(self._view_model.train)
+        # Async execution keeps the GUI responsive for grids whose weight
+        # matrix takes seconds to accumulate (measured: ~2 s at 64x64).
+        self._train_button.clicked.connect(self._view_model.train_async)
         action_row.addWidget(self._train_button)
 
         self._cancel_button = QPushButton("Cancel", self)
