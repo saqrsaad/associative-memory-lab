@@ -10,26 +10,48 @@ from associative_memory.presentation.widgets.metric_card import (
     NOT_CALCULATED_TEXT,
     MetricCard,
 )
+from associative_memory.presentation.widgets.pattern_difference_view import (
+    CATEGORY_EXTRA,
+    CATEGORY_MATCH_OFF,
+    CATEGORY_MATCH_ON,
+    CATEGORY_MISSING,
+    CATEGORY_UNAVAILABLE,
+    DifferenceCounts,
+    PatternDifferenceView,
+)
 from associative_memory.presentation.widgets.pixel_grid import PixelGrid
 from associative_memory.presentation.widgets.status import (
     STATUS_DEFAULT_TEXT,
     StatusBadge,
     StatusKind,
 )
+from associative_memory.presentation.widgets.step_navigator import (
+    StepNavigator,
+    TraceStep,
+)
 from associative_memory.presentation.widgets.vector_view import VectorView
 from associative_memory.presentation.widgets.weight_matrix_view import WeightMatrixView
 
 __all__ = [
+    "CATEGORY_EXTRA",
+    "CATEGORY_MATCH_OFF",
+    "CATEGORY_MATCH_ON",
+    "CATEGORY_MISSING",
+    "CATEGORY_UNAVAILABLE",
     "NOT_CALCULATED_TEXT",
     "STATUS_DEFAULT_TEXT",
+    "DifferenceCounts",
     "EmptyState",
     "FormulaPanel",
     "ImageCanvas",
     "MatrixView",
     "MetricCard",
+    "PatternDifferenceView",
     "PixelGrid",
     "StatusBadge",
     "StatusKind",
+    "StepNavigator",
+    "TraceStep",
     "VectorView",
     "WeightMatrixView",
 ]

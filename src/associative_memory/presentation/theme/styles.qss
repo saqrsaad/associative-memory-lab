@@ -507,7 +507,8 @@ QFrame#WeightMatrixView {
 
 /* ---------- Formula panel ---------- */
 
-QFrame#FormulaPanel {
+QFrame#FormulaPanel,
+QWidget#FormulaPanel {
     background: @SURFACE_ALT@;
     border: @BORDER_WIDTH@ solid @BORDER@;
     border-radius: @CARD_RADIUS@;
@@ -539,3 +540,246 @@ QLabel#TrainingStateText {
     background: transparent;
     font-weight: 600;
 }
+
+/* ---------- Recall workspace ---------- */
+
+QStackedWidget#RecallStateStack,
+QWidget#RecallPlaceholderPage,
+QWidget#VectorView,
+QWidget#StepNavigator,
+QWidget#TraceContentPanel {
+    background: transparent;
+}
+
+QLabel#SectionTitle {
+    font-size: @FONT_TITLE@;
+    font-weight: 600;
+    background: transparent;
+}
+
+QLabel#SubsectionLabel {
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_SMALL@;
+    font-weight: 600;
+    background: transparent;
+}
+
+QLabel#RecallPreprocessingSummary {
+    background: @SURFACE_ALT@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CONTROL_RADIUS@;
+    padding: @SPACE_XXS@ @SPACE_XS@;
+    color: @TEXT_SECONDARY@;
+    font-family: @MONO_FONT_STACK@;
+    font-size: @FONT_CAPTION@;
+}
+
+QLabel#RecallPreprocessingSummary[state="missing"] {
+    border: @BORDER_WIDTH@ dashed @BORDER_STRONG@;
+    font-family: @UI_FONT_STACK@;
+}
+
+QLabel#RecallComparisonNote {
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_SMALL@;
+    background: transparent;
+}
+
+QFrame#VectorPanel {
+    background: @SURFACE@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CARD_RADIUS@;
+}
+
+QFrame#PatternDifferenceView {
+    background: @SURFACE@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CARD_RADIUS@;
+}
+
+QLabel#DifferenceLegend {
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_CAPTION@;
+    background: transparent;
+}
+
+QPlainTextEdit#TraceContent {
+    background: @SURFACE@;
+    color: @TEXT_PRIMARY@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CONTROL_RADIUS@;
+    padding: @SPACE_XXS@;
+    font-family: @MONO_FONT_STACK@;
+    font-size: @FONT_CAPTION@;
+}
+
+QLabel#TraceEquation {
+    color: @PRIMARY_TEXT@;
+    background: @PRIMARY_SOFT@;
+    border-radius: @CONTROL_RADIUS@;
+    padding: @SPACE_XXXS@ @SPACE_XXS@;
+    font-family: @MONO_FONT_STACK@;
+    font-size: @FONT_SMALL@;
+}
+
+QLabel#TraceStepIndex {
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_CAPTION@;
+    background: transparent;
+}
+
+QFrame#RecallWarningsPanel {
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CARD_RADIUS@;
+}
+
+QFrame#RecallWarningsPanel[state="info"] {
+    background: @INFO_SOFT@;
+    border-color: @INFO_TEXT@;
+}
+
+QFrame#RecallWarningsPanel[state="warning"] {
+    background: @WARNING_SOFT@;
+    border-color: @WARNING_TEXT@;
+}
+
+QFrame#RecallWarningsPanel[state="success"] {
+    background: @SUCCESS_SOFT@;
+    border-color: @SUCCESS_TEXT@;
+}
+
+QLabel#RecallWarningsTitle {
+    background: transparent;
+    font-size: @FONT_BODY@;
+    font-weight: 600;
+}
+
+QLabel#RecallWarningsTitle[state="info"] {
+    color: @INFO_TEXT@;
+}
+
+QLabel#RecallWarningsTitle[state="warning"] {
+    color: @WARNING_TEXT@;
+}
+
+QLabel#RecallWarningsTitle[state="success"] {
+    color: @SUCCESS_TEXT@;
+}
+
+QLabel#RecallWarningsText {
+    background: transparent;
+    color: @TEXT_PRIMARY@;
+    font-size: @FONT_SMALL@;
+}
+
+/* ---------- Experiment history ---------- */
+
+QLabel#HistoryStorageLabel {
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_CAPTION@;
+    background: transparent;
+}
+
+QListWidget#HistoryList {
+    background: @SURFACE@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CONTROL_RADIUS@;
+    padding: @SPACE_XXXS@;
+    alternate-background-color: @SURFACE_ALT@;
+}
+
+QListWidget#HistoryList::item {
+    padding: @SPACE_XXXS@ @SPACE_XXS@;
+}
+
+QListWidget#HistoryList::item:selected {
+    background: @PRIMARY_SOFT@;
+    color: @TEXT_PRIMARY@;
+}
+
+QLabel#HistoryDetailTitle {
+    background: transparent;
+    color: @TEXT_PRIMARY@;
+    font-size: @FONT_TITLE@;
+    font-weight: 600;
+}
+
+QLabel#HistorySectionTitle {
+    background: transparent;
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_BODY@;
+    font-weight: 600;
+}
+
+QFrame#HistoryDetailsCard {
+    background: @SURFACE@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CARD_RADIUS@;
+}
+
+QLabel#HistoryDetails {
+    background: transparent;
+    color: @TEXT_PRIMARY@;
+    font-size: @FONT_SMALL@;
+    font-family: @MONO_FONT_STACK@;
+}
+
+QFrame#CompareCard {
+    background: @SURFACE@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CARD_RADIUS@;
+}
+
+QLabel#CompareSubtitle {
+    background: transparent;
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_SMALL@;
+}
+
+QFrame#CompareHeaderRow {
+    background: @SURFACE_ALT@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CONTROL_RADIUS@;
+}
+
+QLabel#CompareHeaderLabel {
+    background: transparent;
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_SMALL@;
+    font-weight: 600;
+}
+
+QFrame#CompareRow {
+    background: @SURFACE@;
+    border: @BORDER_WIDTH@ solid @BORDER@;
+    border-radius: @CONTROL_RADIUS@;
+}
+
+QLabel#CompareLabel {
+    background: transparent;
+    color: @TEXT_SECONDARY@;
+    font-size: @FONT_SMALL@;
+    font-weight: 600;
+}
+
+QLabel#CompareValue {
+    background: transparent;
+    color: @TEXT_PRIMARY@;
+    font-size: @FONT_SMALL@;
+    font-family: @MONO_FONT_STACK@;
+}
+
+QLabel#CompareNote {
+    background: transparent;
+    color: @WARNING_TEXT@;
+    font-size: @FONT_CAPTION@;
+}
+
+QLabel#CompareNotes {
+    background: @INFO_SOFT@;
+    color: @TEXT_PRIMARY@;
+    border-radius: @CONTROL_RADIUS@;
+    padding: @SPACE_XXS@;
+    font-size: @FONT_SMALL@;
+}
+

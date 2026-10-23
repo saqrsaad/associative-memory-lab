@@ -26,8 +26,8 @@ from enum import Enum
 import numpy as np
 from PySide6.QtCore import QObject, QThread, Signal
 
-from associative_memory.algorithms.encoding import coerce_encoding
 from associative_memory.application.dto.training_result import (
+    Encoding,
     MemoryType,
     TrainingResult,
 )
@@ -120,6 +120,12 @@ class TrainingViewModel(QObject):
         return self._state
 
     @property
+    def dataset_view_model(self) -> DatasetViewModel:
+        """The shared dataset view model used to build training pairs."""
+
+        return self._dataset_view_model
+
+    @property
     def memory_type(self) -> MemoryType:
         return self._memory_type
 
@@ -184,7 +190,7 @@ class TrainingViewModel(QObject):
         """
 
         try:
-            coerce_encoding(value)
+            Encoding(value)
         except ValueError as exc:
             self._set_error(f"Invalid encoding: {exc}")
             return

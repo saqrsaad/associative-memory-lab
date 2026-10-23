@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from functools import partial
 
 from PySide6.QtCore import QSize
 from PySide6.QtWidgets import (
@@ -25,6 +24,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from associative_memory.application.dto.saved_experiment import (
+    LoadedExperiment,
+    PreprocessingSettings,
+)
+from associative_memory.application.services.image_service import (
+    PreprocessingConfig,
+)
 from associative_memory.presentation import APPLICATION_NAME
 from associative_memory.presentation.navigation import (
     ALL_DESTINATIONS,
@@ -34,6 +40,15 @@ from associative_memory.presentation.navigation import (
 from associative_memory.presentation.theme.spacing import SPACE_MD, SPACE_SM
 from associative_memory.presentation.viewmodels.dataset_viewmodel import (
     DatasetViewModel,
+)
+from associative_memory.presentation.viewmodels.experiment_history_viewmodel import (
+    ExperimentHistoryViewModel,
+)
+from associative_memory.presentation.viewmodels.recall_viewmodel import (
+    RecallViewModel,
+)
+from associative_memory.presentation.viewmodels.training_viewmodel import (
+    TrainingViewModel,
 )
 from associative_memory.presentation.widgets.empty_state import EmptyState
 
@@ -132,17 +147,56 @@ class MainWindow(QMainWindow):
         self._page_widgets: dict[NavigationDestination, QWidget] = {}
         self._current_destination: NavigationDestination | None = None
 
-        # Shared dataset view model across the dataset and training pages.
+        # Shared dataset and training view models across the dataset,
+        # training, and recall pages so recall can reuse trained models.
         self._dataset_view_model = DatasetViewModel()
+        self._training_view_model = TrainingViewModel(
+            dataset_view_model=self._dataset_view_model
+        )
+        # Create the recall view model eagerly so every training result in
+        # this session is added to the recall model catalog, even if the
+        # recall page is opened only later.
+        self._recall_view_model = RecallViewModel(
+            training_view_model=self._training_view_model
+        )
+        # The experiment history shares this window so that recalls saved
+        # from the recall page refresh the listing, and experiments opened
+        # from history register their stored model with the recall catalog.
+        self._experiment_history_view_model = ExperimentHistoryViewModel()
+        self._recall_view_model.experiment_saved.connect(
+            self._experiment_history_view_model.refresh
+        )
+        self._experiment_history_view_model.loaded_experiment_changed.connect(
+            self._on_experiment_loaded
+        )
 
-        # Re-register dataset and training pages with the shared view model.
+        # Re-register dataset, training, and recall pages with the shared
+        # view models. The page registry calls factories with a single
+        # parent argument, so these wrappers bind dependencies explicitly
+        # and keep the parent as a keyword argument.
         register_page(
             NavigationDestination.IMAGE_DATASET,
-            partial(DatasetView, dataset_view_model=self._dataset_view_model),
+            lambda parent=None: DatasetView(
+                view_model=self._dataset_view_model, parent=parent
+            ),
         )
         register_page(
             NavigationDestination.TRAINING,
-            partial(TrainingView, dataset_view_model=self._dataset_view_model),
+            lambda parent=None: TrainingView(
+                training_view_model=self._training_view_model, parent=parent
+            ),
+        )
+        register_page(
+            NavigationDestination.RECALL_RESULTS,
+            lambda parent=None: RecallView(
+                view_model=self._recall_view_model, parent=parent
+            ),
+        )
+        register_page(
+            NavigationDestination.EXPERIMENT_HISTORY,
+            lambda parent=None: ExperimentView(
+                view_model=self._experiment_history_view_model, parent=parent
+            ),
         )
 
         self._open_page(ALL_DESTINATIONS[0])
@@ -250,6 +304,46 @@ class MainWindow(QMainWindow):
             ]
             button.setChecked(button_destination is destination)
 
+    def _on_experiment_loaded(self, loaded: object) -> None:
+        """Register a saved experiment's model with the recall workspace.
+
+        The stored preprocessing settings are rebuilt only when the stored
+        grid dimension matches the model; otherwise the recall view model
+        falls back to its own inference (or to manual image import).
+        """
+
+        if not isinstance(loaded, LoadedExperiment):
+            return
+
+        training = loaded.training
+        source_config = self._config_for_dimension(
+            loaded.preprocessing, training.input_dimension
+        )
+        target_config = self._config_for_dimension(
+            loaded.target_preprocessing, training.output_dimension
+        )
+        self._recall_view_model.add_training_result(
+            training,
+            label=f"Loaded: {loaded.name}",
+            preprocessing_config=source_config,
+            target_preprocessing_config=target_config,
+        )
+
+    @staticmethod
+    def _config_for_dimension(
+        loaded_settings: object, dimension: int
+    ) -> PreprocessingConfig | None:
+        """Rebuild stored preprocessing settings when the grid matches."""
+
+        if not isinstance(loaded_settings, PreprocessingSettings):
+            return None
+        if loaded_settings.width * loaded_settings.height != dimension:
+            return None
+        try:
+            return loaded_settings.to_config()
+        except (TypeError, ValueError):
+            return None
+
     def _on_nav_toggled(self, button: QPushButton, checked: bool) -> None:
         """React to navigation button toggles."""
 
@@ -266,9 +360,10 @@ def default_page_destination() -> NavigationDestination:
 
 
 # Register the page views with the shell. Views are imported here so the
-# page registry is populated when the main window is imported. The dataset
-# and training pages share a DatasetViewModel created by MainWindow; their
-# registrations are updated in MainWindow.__init__ to bind that instance.
+# page registry is populated when the main window is imported. The dataset,
+# training, and recall pages share the view models created by MainWindow;
+# their registrations are updated in MainWindow.__init__ to bind those
+# instances.
 from associative_memory.presentation.views.dashboard_view import DashboardView  # noqa: E402
 from associative_memory.presentation.views.dataset_view import DatasetView  # noqa: E402
 from associative_memory.presentation.views.experiment_view import (  # noqa: E402
@@ -283,8 +378,20 @@ from associative_memory.presentation.views.training_view import (  # noqa: E402
 )
 
 register_page(NavigationDestination.DASHBOARD, DashboardView)
-register_page(NavigationDestination.IMAGE_DATASET, DatasetView)
-register_page(NavigationDestination.TRAINING, TrainingView)
-register_page(NavigationDestination.RECALL_RESULTS, RecallView)
-register_page(NavigationDestination.EXPERIMENT_HISTORY, ExperimentView)
+register_page(
+    NavigationDestination.IMAGE_DATASET,
+    lambda parent=None: DatasetView(parent=parent),
+)
+register_page(
+    NavigationDestination.TRAINING,
+    lambda parent=None: TrainingView(parent=parent),
+)
+register_page(
+    NavigationDestination.RECALL_RESULTS,
+    lambda parent=None: RecallView(parent=parent),
+)
+register_page(
+    NavigationDestination.EXPERIMENT_HISTORY,
+    lambda parent=None: ExperimentView(parent=parent),
+)
 register_page(NavigationDestination.SETTINGS, SettingsView)

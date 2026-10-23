@@ -62,14 +62,28 @@ class TrainingView(QWidget):
     def __init__(
         self,
         dataset_view_model: DatasetViewModel | None = None,
+        training_view_model: TrainingViewModel | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
 
-        self._dataset_view_model = dataset_view_model or DatasetViewModel()
-        self._view_model = TrainingViewModel(
-            dataset_view_model=self._dataset_view_model
-        )
+        if training_view_model is not None:
+            shared_dataset = training_view_model.dataset_view_model
+            if (
+                dataset_view_model is not None
+                and dataset_view_model is not shared_dataset
+            ):
+                raise ValueError(
+                    "dataset_view_model must be the training view model's "
+                    "dataset view model."
+                )
+            self._dataset_view_model = shared_dataset
+            self._view_model = training_view_model
+        else:
+            self._dataset_view_model = dataset_view_model or DatasetViewModel()
+            self._view_model = TrainingViewModel(
+                dataset_view_model=self._dataset_view_model
+            )
 
         self._build_layout()
         self._wire_signals()

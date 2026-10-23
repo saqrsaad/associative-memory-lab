@@ -134,6 +134,13 @@ class EmptyState(QFrame):
         self.style().unpolish(self)
         self.style().polish(self)
 
+    def set_title(self, title: str) -> None:
+        """Replace the primary heading text."""
+
+        self._title = title
+        self._title_label.setText(title)
+        self._apply_accessibility()
+
     def set_icon(self, icon: QIcon | None) -> None:
         """Show an optional leading icon above the title."""
 
