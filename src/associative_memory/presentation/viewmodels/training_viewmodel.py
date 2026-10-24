@@ -434,10 +434,16 @@ class TrainingViewModel(QObject):
 
         steps: list[TrainingTraceStep] = []
         accumulated = np.zeros_like(self._current_result.weight_matrix)
+        last_index = len(pairs) - 1
 
         for index, (source, target) in enumerate(pairs):
             contribution = self._current_result.contributions[index]
             accumulated = accumulated + contribution
+            if index == last_index:
+                # The algorithm's final accumulated matrix is authoritative.
+                accumulated = np.array(
+                    self._current_result.weight_matrix, dtype=np.float64, copy=True
+                )
 
             if self._memory_type is MemoryType.AUTOASSOCIATIVE:
                 equation = (

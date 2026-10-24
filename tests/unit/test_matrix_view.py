@@ -41,6 +41,32 @@ def test_matrix_view_row_col_labels(qt_app: QApplication) -> None:
     assert view._col_labels == ["c0", "c1"]
 
 
+def test_matrix_view_shows_row_and_column_labels_when_supplied(qt_app: QApplication) -> None:
+    view = MatrixView()
+    view.set_matrix(
+        np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64),
+        row_labels=["s0", "s1"],
+        col_labels=["t0", "t1"],
+    )
+
+    assert view._show_row_labels is True
+    assert view._show_col_labels is True
+    assert view._row_labels == ["s0", "s1"]
+    assert view._col_labels == ["t0", "t1"]
+
+
+def test_matrix_view_label_visibility_follows_supplied_labels(qt_app: QApplication) -> None:
+    view = MatrixView()
+    view.set_matrix(np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64))
+    assert view._show_row_labels is False
+    assert view._show_col_labels is False
+
+    view.set_row_labels(["r0", "r1"])
+    view.set_col_labels(["c0", "c1"])
+    assert view._show_row_labels is True
+    assert view._show_col_labels is True
+
+
 
 def test_matrix_view_paint_does_not_crash(qt_app: QApplication) -> None:
     view = MatrixView()

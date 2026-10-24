@@ -28,6 +28,9 @@ from associative_memory.application.dto.saved_experiment import (
     LoadedExperiment,
     PreprocessingSettings,
 )
+from associative_memory.application.services.experiment_history_service import (
+    ExperimentHistoryService,
+)
 from associative_memory.application.services.image_service import (
     PreprocessingConfig,
 )
@@ -153,16 +156,22 @@ class MainWindow(QMainWindow):
         self._training_view_model = TrainingViewModel(
             dataset_view_model=self._dataset_view_model
         )
+        # Both workspaces use the same persistence service, so saving and
+        # listing always target the same experiment repository.
+        experiment_history_service = ExperimentHistoryService()
         # Create the recall view model eagerly so every training result in
         # this session is added to the recall model catalog, even if the
         # recall page is opened only later.
         self._recall_view_model = RecallViewModel(
-            training_view_model=self._training_view_model
+            training_view_model=self._training_view_model,
+            history_service=experiment_history_service,
         )
         # The experiment history shares this window so that recalls saved
         # from the recall page refresh the listing, and experiments opened
         # from history register their stored model with the recall catalog.
-        self._experiment_history_view_model = ExperimentHistoryViewModel()
+        self._experiment_history_view_model = ExperimentHistoryViewModel(
+            history_service=experiment_history_service
+        )
         self._recall_view_model.experiment_saved.connect(
             self._experiment_history_view_model.refresh
         )
@@ -194,9 +203,7 @@ class MainWindow(QMainWindow):
         )
         register_page(
             NavigationDestination.EXPERIMENT_HISTORY,
-            lambda parent=None: ExperimentView(
-                view_model=self._experiment_history_view_model, parent=parent
-            ),
+            self._build_experiment_page,
         )
 
         self._open_page(ALL_DESTINATIONS[0])
@@ -252,6 +259,19 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._page_title, stretch=1)
 
         return top_bar
+
+    def _build_experiment_page(
+        self, parent: QWidget | None = None
+    ) -> QWidget:
+        """Build Experiment History and route its explicit recall action."""
+
+        page = ExperimentView(
+            view_model=self._experiment_history_view_model, parent=parent
+        )
+        page.open_in_recall_requested.connect(
+            lambda: self._open_page(NavigationDestination.RECALL_RESULTS)
+        )
+        return page
 
     # ------------------------------------------------------------------ pages
 

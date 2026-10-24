@@ -182,6 +182,49 @@ def test_training_view_shows_weight_matrix(qt_app: QApplication) -> None:
     assert matrix_view.matrix().shape == (3, 3)
 
 
+def test_training_view_trace_exposes_calculation_details(qt_app: QApplication) -> None:
+    dvm = DatasetViewModel()
+    dvm.set_memory_type(MEMORY_HETEROASSOCIATIVE)
+
+    view = TrainingView(dataset_view_model=dvm)
+    view.show()
+
+    s1 = np.array([1.0, -1.0], dtype=np.float64)
+    s2 = np.array([-1.0, 1.0], dtype=np.float64)
+    dvm._entries = [
+        _make_entry(dvm, "e1", s1, MEMORY_HETEROASSOCIATIVE, target_label="e2"),
+        _make_entry(dvm, "e2", s2, MEMORY_HETEROASSOCIATIVE, target_label="e1"),
+    ]
+    dvm.entries_changed.emit()
+
+    view._view_model.set_encoding("bipolar")
+    view._view_model.set_trace_enabled(True)
+    view._refresh_state()
+
+    view._train_button.click()
+    _wait_until_not_training(view, qt_app)
+    assert view._view_model.state == TrainingState.COMPLETED
+
+    # The final weight matrix is exposed through the weight-matrix viewer,
+    # with row/column labels enabled for the s/t labeling convention.
+    assert view._weight_matrix_view.matrix() is not None
+    assert view._weight_matrix_view._matrix_view._show_row_labels is True
+    assert view._weight_matrix_view._matrix_view._show_col_labels is True
+
+    # The learning trace exposes source, target, contribution and
+    # accumulated values, plus a final weight-matrix summary.
+    assert view._trace_list.count() >= 2
+    first_text = view._trace_list.item(0).text()
+    assert "Pair 0" in first_text
+    assert "source:" in first_text
+    assert "target:" in first_text
+    assert "contribution" in first_text
+    assert "accumulated" in first_text
+
+    final_text = view._trace_list.item(view._trace_list.count() - 1).text()
+    assert "Final weight matrix" in final_text
+
+
 def test_training_view_allows_retraining_after_completion(qt_app: QApplication) -> None:
     dvm = DatasetViewModel()
     dvm.set_memory_type(MEMORY_AUTOASSOCIATIVE)

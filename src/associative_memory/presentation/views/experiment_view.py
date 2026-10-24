@@ -10,7 +10,7 @@ and notes that the service already annotated for compatibility.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFrame,
@@ -58,6 +58,10 @@ _PAGE_COMPARISON = 2
 
 class ExperimentView(QWidget):
     """The Experiment History page."""
+
+    #: Emitted after the explicit "Open in Recall" action loads an
+    #: experiment. Double-click inspection deliberately does not emit it.
+    open_in_recall_requested = Signal()
 
     def __init__(
         self,
@@ -114,7 +118,7 @@ class ExperimentView(QWidget):
         layout.setContentsMargins(SPACE_SM, SPACE_SM, SPACE_SM, SPACE_SM)
         layout.setSpacing(SPACE_XS)
 
-        title = QLabel("Experiment History", panel)
+        title = QLabel("Saved Experiments", panel)
         title_font = title.font()
         title_font.setWeight(QFont.Weight.Bold)
         title.setFont(title_font)
@@ -157,8 +161,8 @@ class ExperimentView(QWidget):
         self._open_button = QPushButton("Open in Recall", panel)
         self._open_button.setProperty("variant", "primary")
         self._open_button.setToolTip(
-            "Load the selected experiment; its stored model becomes "
-            "available in the recall workspace."
+            "Load the selected experiment and open it in the Recall "
+            "workspace."
         )
         self._open_button.clicked.connect(self._on_open_clicked)
         actions.addWidget(self._open_button)
@@ -351,10 +355,14 @@ class ExperimentView(QWidget):
                 else Qt.CheckState.Unchecked
             )
             item.setToolTip(self._entry_tooltip(summary))
-            item.setAccessibleName(
-                f"Saved experiment {summary.display_name}"
+            item.setData(
+                Qt.ItemDataRole.AccessibleTextRole,
+                f"Saved experiment {summary.display_name}",
             )
-            item.setAccessibleDescription(self._entry_tooltip(summary))
+            item.setData(
+                Qt.ItemDataRole.AccessibleDescriptionRole,
+                self._entry_tooltip(summary),
+            )
             if summary.experiment_id == selected_id:
                 item.setSelected(True)
         self._history_list.blockSignals(False)
@@ -477,11 +485,14 @@ class ExperimentView(QWidget):
         summary = self._selected_summary()
         if summary is None:
             return
-        self._open_experiment(summary.experiment_id)
+        if self._open_experiment(summary.experiment_id) is not None:
+            self.open_in_recall_requested.emit()
 
-    def _open_experiment(self, experiment_id: str) -> None:
-        if self._view_model.load_experiment(experiment_id) is not None:
+    def _open_experiment(self, experiment_id: str) -> LoadedExperiment | None:
+        loaded = self._view_model.load_experiment(experiment_id)
+        if loaded is not None:
             self._show_workspace_page()
+        return loaded
 
     def _on_delete_clicked(self) -> None:
         summary = self._selected_summary()

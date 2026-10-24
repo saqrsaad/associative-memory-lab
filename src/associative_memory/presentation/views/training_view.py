@@ -11,6 +11,7 @@ application services.
 
 from __future__ import annotations
 
+import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
@@ -96,19 +97,27 @@ class TrainingView(QWidget):
         root.setContentsMargins(SPACE_SM, SPACE_SM, SPACE_SM, SPACE_SM)
         root.setSpacing(SPACE_XS)
 
-        # Configuration panel.
-        config_panel = self._build_config_panel()
-        root.addWidget(config_panel)
+        # Setup band: the fixed-width configuration column sits beside the
+        # expanding dataset review, keeping this area compact vertically
+        # and leaving more height for the results below.
+        setup_row = QHBoxLayout()
+        setup_row.setSpacing(SPACE_SM)
 
-        # Dataset review section.
+        config_panel = self._build_config_panel()
+        config_panel.setFixedWidth(_CONFIG_PANEL_WIDTH)
+        setup_row.addWidget(config_panel)
+
         dataset_panel = self._build_dataset_panel()
-        root.addWidget(dataset_panel)
+        setup_row.addWidget(dataset_panel, stretch=1)
+
+        root.addLayout(setup_row)
 
         # Train button and status.
         action_row = QHBoxLayout()
         action_row.setSpacing(SPACE_XS)
 
         self._train_button = QPushButton("Train Memory", self)
+        self._train_button.setProperty("variant", "primary")
         self._train_button.setMinimumWidth(140)
         self._train_button.setEnabled(False)
         # Async execution keeps the GUI responsive for grids whose weight
@@ -125,6 +134,8 @@ class TrainingView(QWidget):
         action_row.addStretch(1)
 
         self._train_status = StatusBadge(StatusKind.INFO, "Ready")
+        self._train_status.text_label.setWordWrap(True)
+        self._train_status.setMaximumWidth(620)
         action_row.addWidget(self._train_status)
 
         root.addLayout(action_row)
@@ -171,11 +182,6 @@ class TrainingView(QWidget):
         trace_layout = QVBoxLayout(trace_group)
         trace_layout.setContentsMargins(SPACE_XS, SPACE_XS, SPACE_XS, SPACE_XS)
         trace_layout.setSpacing(SPACE_XXS)
-
-        self._trace_toggle = QCheckBox("Show detailed calculation trace", self)
-        self._trace_toggle.setChecked(False)
-        self._trace_toggle.toggled.connect(self._view_model.set_trace_enabled)
-        trace_layout.addWidget(self._trace_toggle)
 
         self._trace_list = QListWidget(self)
         self._trace_list.setMaximumHeight(200)
@@ -232,6 +238,10 @@ class TrainingView(QWidget):
             self._view_model.set_trace_enabled
         )
         layout.addWidget(self._trace_toggle_config)
+
+        # Keep the configuration content top-aligned when the panel shares
+        # the setup row with a taller dataset panel.
+        layout.addStretch(1)
 
         return panel
 
@@ -464,6 +474,8 @@ class TrainingView(QWidget):
             source_dim=result.input_dimension,
             target_dim=result.output_dimension,
             pair_count=result.pair_count,
+            activation=result.activation_name,
+            threshold=result.threshold,
         )
         self._formula_panel.set_equation(
             f"W = Σ outer(s, {'s' if result.memory_type is MemoryType.AUTOASSOCIATIVE else 't'})"
@@ -475,13 +487,62 @@ class TrainingView(QWidget):
     def _on_trace_ready(self, steps) -> None:
         self._trace_list.clear()
         for step in steps:
-            item = QListWidgetItem(
-                f"Pair {step.pair_index}: {step.equation} "
-                f"(contribution {step.contribution.shape[0]}×{step.contribution.shape[1]})"
-            )
+            item = QListWidgetItem(self._format_trace_step(step))
             item.setData(Qt.ItemDataRole.UserRole, step)
             self._trace_list.addItem(item)
+
+        result = self._view_model.current_result
+        if result is not None and steps:
+            final_item = QListWidgetItem(
+                f"Final weight matrix ({result.input_dimension}×"
+                f"{result.output_dimension}, {result.pair_count} pair(s)): "
+                f"{self._format_matrix(result.weight_matrix)}"
+            )
+            self._trace_list.addItem(final_item)
+
         self._trace_list.show()
+
+    def _format_trace_step(self, step) -> str:
+        """Human-readable, single-line rendering of one trace step."""
+
+        text = (
+            f"Pair {step.pair_index}: {step.equation} "
+            f"(contribution {step.contribution.shape[0]}×{step.contribution.shape[1]})"
+        )
+        text += f" | source: {self._format_vector(step.source_pattern)}"
+        if self._view_model.memory_type.value == "heteroassociative":
+            text += f" | target: {self._format_vector(step.target_pattern)}"
+        text += f" | contribution: {self._format_matrix(step.contribution)}"
+        text += f" | accumulated: {self._format_matrix(step.accumulated)}"
+        return text
+
+    @staticmethod
+    def _format_number(value: float) -> str:
+        """Format one number compactly (integer values without decimals)."""
+
+        number = float(value)
+        if number.is_integer():
+            return str(int(number))
+        return f"{number:g}"
+
+    @staticmethod
+    def _format_vector(values) -> str:
+        """Format a pattern vector as a compact bracketed list."""
+
+        array = np.asarray(values, dtype=np.float64)
+        return "[" + ", ".join(TrainingView._format_number(float(v)) for v in array) + "]"
+
+    @staticmethod
+    def _format_matrix(matrix) -> str:
+        """Format a matrix as a compact bracketed nested list."""
+
+        array = np.asarray(matrix, dtype=np.float64)
+        rows = []
+        for row in array:
+            rows.append(
+                "[" + ", ".join(TrainingView._format_number(float(v)) for v in row) + "]"
+            )
+        return "[" + ", ".join(rows) + "]"
 
     def _on_error(self, message: str) -> None:
         pass  # already shown via status_message

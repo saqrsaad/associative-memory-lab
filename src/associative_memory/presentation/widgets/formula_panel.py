@@ -67,17 +67,33 @@ class FormulaPanel(QWidget):
         source_dim: int,
         target_dim: int,
         pair_count: int,
+        activation: str | None = None,
+        threshold: float | None = None,
     ) -> None:
-        """Build a standard learning-rule caption from training metadata."""
+        """Build a standard learning-rule caption from training metadata.
+
+        Args:
+            memory_type: Memory mode used for the run.
+            encoding: Pattern encoding used for the run.
+            source_dim: Source (input) pattern length.
+            target_dim: Target (output) pattern length.
+            pair_count: Number of training pairs.
+            activation: Optional activation function name (for example
+                ``"bipolar_activation"``) applied to the net input.
+            threshold: Optional activation threshold.
+        """
 
         rule = (
             "outer(s, s)" if memory_type == "autoassociative" else "outer(s, t)"
         )
-        self.set_caption(
+        caption = (
             f"{memory_type} · {encoding} encoding · "
             f"{pair_count} pair(s) · {source_dim}×{target_dim} matrix · "
             f"W = Σ {rule}"
         )
+        if activation is not None and threshold is not None:
+            caption += f" · {activation} (threshold {threshold:g})"
+        self.set_caption(caption)
 
     def clear(self) -> None:
         """Clear all displayed content."""

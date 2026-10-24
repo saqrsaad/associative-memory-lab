@@ -55,24 +55,30 @@ class MatrixView(QWidget):
     ) -> None:
         """Display ``matrix`` with optional row/column labels.
 
-        Clears the view when ``matrix`` is ``None``.
+        Clears the view when ``matrix`` is ``None``. Labels supplied with
+        the matrix (or later via the label setters) are shown; ``None``
+        suppresses the corresponding label row/column.
         """
 
         self._matrix = None if matrix is None else np.asarray(matrix, dtype=np.float64)
         self._row_labels = row_labels
         self._col_labels = col_labels
+        self._show_row_labels = row_labels is not None
+        self._show_col_labels = col_labels is not None
         self.update()
 
     def set_row_labels(self, labels: list[str] | None) -> None:
         """Set row labels shown along the left edge."""
 
         self._row_labels = labels
+        self._show_row_labels = labels is not None
         self.update()
 
     def set_col_labels(self, labels: list[str] | None) -> None:
         """Set column labels shown along the top edge."""
 
         self._col_labels = labels
+        self._show_col_labels = labels is not None
         self.update()
 
     def matrix(self) -> NDArray[np.float64] | None:

@@ -207,6 +207,9 @@ def test_training_viewmodel_trace_steps() -> None:
     np.testing.assert_array_equal(
         steps[1].accumulated, np.outer(p1, p1) + np.outer(p2, p2)
     )
+    np.testing.assert_array_equal(
+        steps[-1].accumulated, vm.current_result.weight_matrix
+    )
 
 
 def test_training_viewmodel_dataset_change_invalidates_model() -> None:

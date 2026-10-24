@@ -5,12 +5,23 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFrame,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
 
 _OBJECT_NAME = "VectorView"
 _VALUES_OBJECT_NAME = "VectorValues"
 _LENGTH_OBJECT_NAME = "VectorLength"
 _TOGGLE_OBJECT_NAME = "VectorToggle"
+
+#: The values area is bounded so a long vector cannot keep growing the page.
+_VALUES_MIN_HEIGHT = 96
+_VALUES_MAX_HEIGHT = 200
 
 
 class VectorView(QWidget):
@@ -20,9 +31,11 @@ class VectorView(QWidget):
     vector view and the pixel grid agree. Presentation-only: it renders
     caller-provided vectors and performs no numerical work.
 
-    For large vectors callers may pass ``max_values`` to show a compact
-    head-of-vector summary. The exact values remain available through the
-    "Show all values" control, so underlying data is never silently hidden.
+    Long vectors are shown inside a bounded, scrollable values area so they
+    cannot expand the surrounding page indefinitely. For large vectors
+    callers may also pass ``max_values`` to show a compact head-of-vector
+    summary. The exact values remain available through the "Show all values"
+    control, so underlying data is never silently hidden.
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -43,6 +56,20 @@ class VectorView(QWidget):
             Qt.TextInteractionFlag.TextSelectableByMouse
         )
 
+        self._values_scroll = QScrollArea(self)
+        self._values_scroll.setObjectName("VectorValuesScroll")
+        self._values_scroll.setWidgetResizable(True)
+        self._values_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._values_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self._values_scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self._values_scroll.setMinimumHeight(_VALUES_MIN_HEIGHT)
+        self._values_scroll.setMaximumHeight(_VALUES_MAX_HEIGHT)
+        self._values_scroll.setWidget(self._values_label)
+
         self._length_label = QLabel(self)
         self._length_label.setObjectName(_LENGTH_OBJECT_NAME)
         self._length_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -55,7 +82,7 @@ class VectorView(QWidget):
         self._toggle_button.clicked.connect(self._toggle_truncation)
         self._toggle_button.hide()
 
-        layout.addWidget(self._values_label)
+        layout.addWidget(self._values_scroll, stretch=1)
         layout.addWidget(self._length_label)
         layout.addWidget(self._toggle_button)
 
@@ -92,6 +119,7 @@ class VectorView(QWidget):
         self._max_values = max_values
         self._show_all = False
         self._refresh()
+        self._reset_scroll_position()
 
     def vector(self) -> NDArray[np.integer] | None:
         """The currently displayed vector (read-only input)."""
@@ -129,6 +157,11 @@ class VectorView(QWidget):
     def _toggle_truncation(self) -> None:
         self._show_all = not self._show_all
         self._refresh()
+        self._reset_scroll_position()
+
+    def _reset_scroll_position(self) -> None:
+        self._values_scroll.verticalScrollBar().setValue(0)
+        self._values_scroll.horizontalScrollBar().setValue(0)
 
     def _refresh(self) -> None:
         if self._vector is None:

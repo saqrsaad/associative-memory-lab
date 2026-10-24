@@ -52,6 +52,22 @@ def test_formula_panel_set_learning_rule_hetero(qt_app: QApplication) -> None:
     assert "outer(s, t)" in panel._caption
 
 
+def test_formula_panel_learning_rule_includes_activation(qt_app: QApplication) -> None:
+    panel = FormulaPanel()
+    panel.set_learning_rule(
+        memory_type="heteroassociative",
+        encoding="bipolar",
+        source_dim=2,
+        target_dim=3,
+        pair_count=5,
+        activation="bipolar_activation",
+        threshold=0.0,
+    )
+
+    assert "bipolar_activation" in panel._caption
+    assert "threshold" in panel._caption
+
+
 def test_formula_panel_clear(qt_app: QApplication) -> None:
     panel = FormulaPanel()
     panel.set_equation("W = Σ outer(s, t)")

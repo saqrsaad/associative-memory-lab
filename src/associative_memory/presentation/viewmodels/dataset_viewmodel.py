@@ -341,23 +341,29 @@ class DatasetViewModel(QObject):
         entry = self.selected_entry
         self.entry_selected.emit(entry)
 
-    def set_selected_target(self, label: str | None) -> None:
-        """Assign (or clear) the target label of the selected entry.
+    def set_entry_target(self, entry_id: str, label: str | None) -> None:
+        """Assign (or clear) the target label of one specific entry.
 
         Only meaningful for heteroassociative memory; autoassociative
         targets always equal the source pattern.
         """
 
-        entry = self.selected_entry
-        if entry is None:
-            return
         if self._memory_type == MEMORY_AUTOASSOCIATIVE:
             return
-        cleaned = None if label is None or not str(label).strip() else str(label).strip()
+        entry = self.entry_for_id(entry_id)
+        if entry is None:
+            return
+        cleaned = (
+            None
+            if label is None or not str(label).strip()
+            else str(label).strip()
+        )
         if cleaned == entry.target_label:
             return
         index = next(
-            i for i, other in enumerate(self._entries) if other.entry_id == entry.entry_id
+            i
+            for i, other in enumerate(self._entries)
+            if other.entry_id == entry.entry_id
         )
         self._entries[index] = replace(entry, target_label=cleaned)
         self.entries_changed.emit()
@@ -365,6 +371,14 @@ class DatasetViewModel(QObject):
             f"Target label set to {cleaned!r}." if cleaned else "Target label cleared.",
             StatusKind.SUCCESS,
         )
+
+    def set_selected_target(self, label: str | None) -> None:
+        """Assign (or clear) the target label of the selected entry."""
+
+        entry = self.selected_entry
+        if entry is None:
+            return
+        self.set_entry_target(entry.entry_id, label)
 
     def clear_dataset(self) -> None:
         """Remove every dataset entry."""

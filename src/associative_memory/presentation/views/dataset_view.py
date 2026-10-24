@@ -11,7 +11,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PIL import Image
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QComboBox,
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QSplitter,
     QVBoxLayout,
@@ -36,6 +38,7 @@ from associative_memory.application.services.image_service import (
     ForegroundPolarity,
     GrayscaleMethod,
     PreprocessingConfig,
+    PreprocessingResult,
     ResizeMode,
 )
 from associative_memory.presentation.theme.spacing import (
@@ -45,6 +48,7 @@ from associative_memory.presentation.theme.spacing import (
     SPACE_XXS,
 )
 from associative_memory.presentation.viewmodels.dataset_viewmodel import (
+    MEMORY_AUTOASSOCIATIVE,
     DatasetEntry,
     DatasetViewModel,
 )
@@ -59,7 +63,60 @@ from associative_memory.presentation.widgets import (
 
 _CONFIG_PANEL_WIDTH = 260
 _ENTRY_LIST_WIDTH = 260
-_PREVIEW_SIZE = 220
+_FILE_LABEL_MIN_WIDTH = 120
+_FILE_LABEL_MAX_WIDTH = 240
+_PREVIEW_SIZE = 180
+
+
+class _ElidedFileNameLabel(QLabel):
+    """Show a file name at a bounded width, eliding the middle if needed."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__("No image imported", parent)
+        self._full_text = "No image imported"
+        self.setObjectName("FileLabel")
+        self.setAccessibleName("Imported image")
+        self.setMinimumWidth(_FILE_LABEL_MIN_WIDTH)
+        self.setMaximumWidth(_FILE_LABEL_MAX_WIDTH)
+        self.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+
+    def set_full_text(self, text: str, *, tooltip: str = "") -> None:
+        """Set the complete text while displaying an elided variant."""
+
+        self._full_text = text
+        self.setToolTip(tooltip)
+        self.setAccessibleDescription(text)
+        self._update_elided_text()
+        self.updateGeometry()
+
+    def full_text(self) -> str:
+        """The complete, unelided file name."""
+
+        return self._full_text
+
+    def sizeHint(self) -> QSize:
+        hint = super().sizeHint()
+        full_text_width = self.fontMetrics().horizontalAdvance(self._full_text)
+        width = max(
+            _FILE_LABEL_MIN_WIDTH,
+            min(_FILE_LABEL_MAX_WIDTH, full_text_width),
+        )
+        return QSize(width, hint.height())
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        self._update_elided_text()
+
+    def _update_elided_text(self) -> None:
+        available = max(0, self.contentsRect().width())
+        display_text = self.fontMetrics().elidedText(
+            self._full_text,
+            Qt.TextElideMode.ElideMiddle,
+            available,
+        )
+        super().setText(display_text)
 
 
 class EntryRow(QFrame):
@@ -83,8 +140,8 @@ class EntryRow(QFrame):
         layout.setContentsMargins(SPACE_XS, SPACE_XXS, SPACE_XS, SPACE_XXS)
         layout.setSpacing(SPACE_XS)
 
-        badge_text = "source" if entry.memory_type is MemoryType.AUTOASSOCIATIVE else "input"
-        if entry.memory_type is MemoryType.HETEROASSOCIATIVE and entry.target_label:
+        badge_text = "source" if entry.memory_type == MemoryType.AUTOASSOCIATIVE else "input"
+        if entry.memory_type == MemoryType.HETEROASSOCIATIVE and entry.target_label:
             badge_text = f"target: {entry.target_label}"
 
         self._role_label = QLabel(badge_text, self)
@@ -99,11 +156,16 @@ class EntryRow(QFrame):
 
         self._target_input = QComboBox(self)
         self._target_input.setEditable(True)
+        self._target_input.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self._target_input.setMinimumWidth(110)
         self._target_input.addItem(entry.target_label or "")
         self._target_input.setCurrentText(entry.target_label or "")
-        self._target_input.setEnabled(entry.memory_type is MemoryType.HETEROASSOCIATIVE)
-        self._target_input.currentTextChanged.connect(self._on_text_changed)
+        self._target_input.setEnabled(entry.memory_type == MemoryType.HETEROASSOCIATIVE)
+        target_editor = self._target_input.lineEdit()
+        if target_editor is not None:
+            # Commit once editing ends: per-keystroke updates would rebuild
+            # the row list and destroy the editor the user is typing in.
+            target_editor.editingFinished.connect(self._commit_target)
 
         select_button = QPushButton("Select", self)
         select_button.setMinimumWidth(64)
@@ -131,10 +193,10 @@ class EntryRow(QFrame):
         self._entry = entry
         self._role_label.setText(
             "source"
-            if entry.memory_type is MemoryType.AUTOASSOCIATIVE
+            if entry.memory_type == MemoryType.AUTOASSOCIATIVE
             else f"target: {entry.target_label or '—'}"
         )
-        self._target_input.setEnabled(entry.memory_type is MemoryType.HETEROASSOCIATIVE)
+        self._target_input.setEnabled(entry.memory_type == MemoryType.HETEROASSOCIATIVE)
         self._target_input.blockSignals(True)
         self._target_input.setCurrentText(entry.target_label or "")
         self._target_input.blockSignals(False)
@@ -144,8 +206,13 @@ class EntryRow(QFrame):
         self._name_label.setToolTip(str(entry.source_path) if entry.source_path else "")
         self.set_selected(is_selected)
 
-    def _on_text_changed(self, text: str) -> None:
-        self._on_target_changed(self._entry.entry_id, text)
+    def _commit_target(self) -> None:
+        """Commit the current editor text when editing finishes."""
+
+        self._on_target_changed(
+            self._entry.entry_id,
+            self._target_input.currentText(),
+        )
 
 
 class DatasetView(QWidget):
@@ -167,7 +234,24 @@ class DatasetView(QWidget):
     # ------------------------------------------------------------------ layout
 
     def _build_layout(self) -> None:
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        scroll = QScrollArea(self)
+        scroll.setObjectName("DatasetScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+
+        content = QWidget()
+        content.setObjectName("DatasetWorkspace")
+        root = QVBoxLayout(content)
         root.setContentsMargins(SPACE_SM, SPACE_SM, SPACE_SM, SPACE_SM)
         root.setSpacing(SPACE_XS)
 
@@ -198,8 +282,7 @@ class DatasetView(QWidget):
 
         toolbar.addStretch(1)
 
-        self._file_label = QLabel("No image imported", self)
-        self._file_label.setObjectName("FileLabel")
+        self._file_label = _ElidedFileNameLabel(self)
         toolbar.addWidget(self._file_label)
 
         root.addLayout(toolbar)
@@ -212,7 +295,12 @@ class DatasetView(QWidget):
         root.addWidget(self._build_entries_panel())
 
         self._status_badge = StatusBadge(StatusKind.INFO, "Ready")
-        root.addWidget(self._status_badge)
+        self._status_badge.text_label.setWordWrap(True)
+        self._status_badge.setMaximumWidth(620)
+        root.addWidget(self._status_badge, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
 
     def _build_splitter(self) -> QSplitter:
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
@@ -445,6 +533,7 @@ class DatasetView(QWidget):
 
         self._import_button.clicked.connect(self._import_image)
         self._preview_button.clicked.connect(self._update_preview)
+        self._clear_button.clicked.connect(vm.clear_dataset)
         self._memory_combo.currentIndexChanged.connect(self._on_memory_changed)
 
         self._width_spin.valueChanged.connect(
@@ -504,11 +593,7 @@ class DatasetView(QWidget):
         selected = file_dialog.selectedFiles()
         if not selected:
             return
-        vm = self._view_model
-        vm.import_image(selected[0])
-        path = Path(selected[0])
-        self._file_label.setText(path.name)
-        self._file_label.setToolTip(str(path))
+        self._view_model.import_image(selected[0])
 
     def _update_preview(self) -> None:
         vm = self._view_model
@@ -532,17 +617,20 @@ class DatasetView(QWidget):
 
     def _refresh_state(self) -> None:
         vm = self._view_model
-        self._file_label.setText("No image imported")
-        self._file_label.setToolTip("")
-        self._memory_combo.blockSignals(True)
-        self._memory_combo.setCurrentIndex(
-            0 if vm.memory_type is MemoryType.AUTOASSOCIATIVE else 1
-        )
-        self._memory_combo.blockSignals(False)
+        self._sync_memory_combo()
         self._refresh_controls_from_config()
         self._on_entries_changed()
         self._on_preview_changed(vm.current_result)
         self._on_status_message("Ready", StatusKind.INFO)
+
+    def _sync_memory_combo(self) -> None:
+        """Mirror the shared dataset's memory type without changing it."""
+
+        self._memory_combo.blockSignals(True)
+        self._memory_combo.setCurrentIndex(
+            0 if self._view_model.memory_type == MEMORY_AUTOASSOCIATIVE else 1
+        )
+        self._memory_combo.blockSignals(False)
 
     def _refresh_controls_from_config(self) -> None:
         config = self._view_model.config
@@ -577,15 +665,19 @@ class DatasetView(QWidget):
         value = self._memory_combo.itemData(index)
         self._view_model.set_memory_type(value)
 
-    def _on_memory_type_changed(self, memory_type: MemoryType) -> None:
+    def _on_memory_type_changed(self, _memory_type: str) -> None:
+        """Keep this page in sync when Training changes the shared type."""
+
+        self._sync_memory_combo()
         self._on_entries_changed()
 
     def _on_config_changed(self, config: PreprocessingConfig) -> None:
         self._refresh_controls_from_config()
-        self._update_preview_metrics(config)
+        self._update_preview_metrics(self._view_model.current_result)
 
-    def _on_preview_changed(self, result) -> None:
+    def _on_preview_changed(self, result: PreprocessingResult | None) -> None:
         if result is None:
+            self._file_label.set_full_text("No image imported")
             self._original_canvas.clear()
             self._processed_canvas.clear()
             self._pixel_grid.set_matrix(None)
@@ -594,8 +686,21 @@ class DatasetView(QWidget):
             self._add_button.setEnabled(False)
             return
 
+        if result.source_path is None:
+            self._file_label.set_full_text("Imported image")
+        else:
+            source_path = Path(result.source_path)
+            self._file_label.set_full_text(
+                source_path.name,
+                tooltip=str(source_path),
+            )
         self._original_canvas.set_image(result.original_image)
-        self._processed_canvas.set_image(None)  # placeholder: processed image TBD
+        # Show the thresholded pattern as an image. ON cells use the same
+        # dark fill as the encoded pixel grid; OFF cells remain light.
+        thresholded_pixels = (1 - result.binary_matrix) * 255
+        self._processed_canvas.set_image(
+            Image.fromarray(thresholded_pixels.astype("uint8"))
+        )
         self._pixel_grid.set_matrix(result.encoded_matrix)
         self._vector_view.set_vector(
             result.encoded_vector, row_width=result.width
@@ -603,7 +708,11 @@ class DatasetView(QWidget):
         self._update_preview_metrics(result)
         self._add_button.setEnabled(self._view_model.current_is_compatible())
 
-    def _update_preview_metrics(self, result) -> None:
+    def _update_preview_metrics(
+        self, result: PreprocessingResult | None
+    ) -> None:
+        """Show metrics from a preprocessing result, or clear them."""
+
         if result is None:
             for card in (
                 self._width_metric,
@@ -629,26 +738,39 @@ class DatasetView(QWidget):
     def _on_entries_changed(self) -> None:
         vm = self._view_model
         selected_id = vm.selected_entry.entry_id if vm.selected_entry else None
+        entries = vm.entries
+        entry_ids = [entry.entry_id for entry in entries]
 
-        self._entries_list.blockSignals(True)
-        self._entries_list.clear()
-        self._rows = {}
+        if entry_ids == list(self._rows):
+            # Target edits keep the same entry ids. Update the existing rows
+            # in place so committing one editor does not destroy the list
+            # widgets or interrupt another active editor.
+            for index, entry in enumerate(entries):
+                row = self._rows[entry.entry_id]
+                row.update_entry(entry, entry.entry_id == selected_id)
+                item = self._entries_list.item(index)
+                if item is not None:
+                    item.setSizeHint(row.sizeHint())
+        else:
+            self._entries_list.blockSignals(True)
+            self._entries_list.clear()
+            self._rows = {}
 
-        for entry in vm.entries:
-            item = QListWidgetItem(self._entries_list)
-            row = EntryRow(
-                entry,
-                is_selected=(entry.entry_id == selected_id),
-                on_select=self._view_model.select_entry,
-                on_remove=self._view_model.remove_entry,
-                on_target_changed=self._view_model.set_selected_target,
-            )
-            item.setSizeHint(row.sizeHint())
-            self._entries_list.addItem(item)
-            self._entries_list.setItemWidget(item, row)
-            self._rows[entry.entry_id] = row
+            for entry in entries:
+                item = QListWidgetItem(self._entries_list)
+                row = EntryRow(
+                    entry,
+                    is_selected=(entry.entry_id == selected_id),
+                    on_select=self._view_model.select_entry,
+                    on_remove=self._view_model.remove_entry,
+                    on_target_changed=self._view_model.set_entry_target,
+                )
+                item.setSizeHint(row.sizeHint())
+                self._entries_list.addItem(item)
+                self._entries_list.setItemWidget(item, row)
+                self._rows[entry.entry_id] = row
 
-        self._entries_list.blockSignals(False)
+            self._entries_list.blockSignals(False)
 
         self._clear_button.setEnabled(len(vm.entries) > 0)
         self._remove_button.setEnabled(selected_id is not None)
