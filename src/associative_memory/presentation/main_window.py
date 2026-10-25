@@ -12,6 +12,7 @@ import logging
 from collections.abc import Callable
 
 from PySide6.QtCore import QSize
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
@@ -40,7 +41,11 @@ from associative_memory.presentation.navigation import (
     NavigationDestination,
     item_for_destination,
 )
+from associative_memory.presentation.preferences import ApplicationPreferences
 from associative_memory.presentation.theme.spacing import SPACE_MD, SPACE_SM
+from associative_memory.presentation.viewmodels.dashboard_viewmodel import (
+    DashboardViewModel,
+)
 from associative_memory.presentation.viewmodels.dataset_viewmodel import (
     DatasetViewModel,
 )
@@ -49,6 +54,9 @@ from associative_memory.presentation.viewmodels.experiment_history_viewmodel imp
 )
 from associative_memory.presentation.viewmodels.recall_viewmodel import (
     RecallViewModel,
+)
+from associative_memory.presentation.viewmodels.settings_viewmodel import (
+    SettingsViewModel,
 )
 from associative_memory.presentation.viewmodels.training_viewmodel import (
     TrainingViewModel,
@@ -121,6 +129,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(APPLICATION_NAME)
         self.setMinimumSize(_WINDOW_MIN_SIZE)
         self.resize(_WINDOW_DEFAULT_SIZE)
+        self._preferences = ApplicationPreferences()
+        self._restore_window_geometry()
 
         central = QWidget(self)
         central.setObjectName("AppCanvas")
@@ -179,10 +189,41 @@ class MainWindow(QMainWindow):
             self._on_experiment_loaded
         )
 
-        # Re-register dataset, training, and recall pages with the shared
-        # view models. The page registry calls factories with a single
-        # parent argument, so these wrappers bind dependencies explicitly
-        # and keep the parent as a keyword argument.
+        # The dashboard observes the shared workspace view models rather
+        # than maintaining a second copy of dataset, model, or history
+        # state. The settings view model shares the same preference store
+        # used for window restoration in this window.
+        self._dashboard_view_model = DashboardViewModel(
+            dataset_view_model=self._dataset_view_model,
+            training_view_model=self._training_view_model,
+            recall_view_model=self._recall_view_model,
+            history_view_model=self._experiment_history_view_model,
+            parent=self,
+        )
+        self._settings_view_model = SettingsViewModel(
+            preferences=self._preferences,
+            history_view_model=self._experiment_history_view_model,
+            parent=self,
+        )
+        self._settings_view_model.reset_window_layout_requested.connect(
+            self._reset_window_layout
+        )
+
+        # Re-register pages with the shared view models. The page registry
+        # calls factories with a single parent argument, so these wrappers
+        # bind dependencies explicitly and keep the parent as a keyword
+        # argument. Dashboard and Settings are rebound only when the
+        # registry still points at the default or an earlier MainWindow,
+        # preserving an explicitly overridden factory.
+        if _is_rebindable_page_factory(
+            _PAGES.get(NavigationDestination.DASHBOARD),
+            _default_dashboard_page,
+            "_build_dashboard_page",
+        ):
+            register_page(
+                NavigationDestination.DASHBOARD,
+                self._build_dashboard_page,
+            )
         register_page(
             NavigationDestination.IMAGE_DATASET,
             lambda parent=None: DatasetView(
@@ -205,6 +246,15 @@ class MainWindow(QMainWindow):
             NavigationDestination.EXPERIMENT_HISTORY,
             self._build_experiment_page,
         )
+        if _is_rebindable_page_factory(
+            _PAGES.get(NavigationDestination.SETTINGS),
+            _default_settings_page,
+            "_build_settings_page",
+        ):
+            register_page(
+                NavigationDestination.SETTINGS,
+                self._build_settings_page,
+            )
 
         self._open_page(ALL_DESTINATIONS[0])
 
@@ -260,6 +310,34 @@ class MainWindow(QMainWindow):
 
         return top_bar
 
+    def _build_dashboard_page(
+        self, parent: QWidget | None = None
+    ) -> QWidget:
+        """Build the live dashboard and route its empty-state actions."""
+
+        page = DashboardView(
+            view_model=self._dashboard_view_model, parent=parent
+        )
+        page.open_dataset_requested.connect(
+            lambda: self._open_page(NavigationDestination.IMAGE_DATASET)
+        )
+        page.open_training_requested.connect(
+            lambda: self._open_page(NavigationDestination.TRAINING)
+        )
+        page.open_recall_requested.connect(
+            lambda: self._open_page(NavigationDestination.RECALL_RESULTS)
+        )
+        return page
+
+    def _build_settings_page(
+        self, parent: QWidget | None = None
+    ) -> QWidget:
+        """Build Settings with the window's shared preference store."""
+
+        return SettingsView(
+            view_model=self._settings_view_model, parent=parent
+        )
+
     def _build_experiment_page(
         self, parent: QWidget | None = None
     ) -> QWidget:
@@ -314,6 +392,35 @@ class MainWindow(QMainWindow):
         if self._stack.indexOf(page) == -1:
             self._stack.addWidget(page)
         self._stack.setCurrentWidget(page)
+
+    def _restore_window_geometry(self) -> None:
+        """Restore saved window geometry when the preference is enabled."""
+
+        if not self._preferences.remember_window_geometry:
+            return
+        geometry = self._preferences.window_geometry
+        if geometry is not None:
+            self.restoreGeometry(geometry)
+
+    def _reset_window_layout(self) -> None:
+        """Return the window to its default size and a centered position."""
+
+        if self.isMaximized() or self.isFullScreen():
+            self.showNormal()
+        self.resize(_WINDOW_DEFAULT_SIZE)
+        screen = self.screen()
+        if screen is not None:
+            frame = self.frameGeometry()
+            frame.moveCenter(screen.availableGeometry().center())
+            self.move(frame.topLeft())
+        self._preferences.clear_window_geometry()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Persist window geometry when the user enabled that preference."""
+
+        if self._preferences.remember_window_geometry:
+            self._preferences.set_window_geometry(self.saveGeometry())
+        super().closeEvent(event)
 
     def _select_nav_button(self, destination: NavigationDestination) -> None:
         """Update the sidebar to reflect ``destination`` as active."""
@@ -373,6 +480,29 @@ class MainWindow(QMainWindow):
         self._open_page(destination)
 
 
+def _is_rebindable_page_factory(
+    factory: Callable[..., QWidget] | None,
+    default_factory: Callable[..., QWidget],
+    method_name: str,
+) -> bool:
+    """Whether a page factory may be rebound to the current window.
+
+    The default factory is rebound once per window so every window gets its
+    own shared view models. A factory that was explicitly overridden (for
+    example by a test or an embedding application) is preserved. Bound
+    factories from an earlier ``MainWindow`` are rebound for the new window.
+    """
+
+    if factory is default_factory:
+        return True
+    owner = getattr(factory, "__self__", None)
+    factory_function = getattr(factory, "__func__", None)
+    return (
+        isinstance(owner, MainWindow)
+        and factory_function is getattr(MainWindow, method_name, None)
+    )
+
+
 def default_page_destination() -> NavigationDestination:
     """The destination shown when the application launches."""
 
@@ -381,9 +511,9 @@ def default_page_destination() -> NavigationDestination:
 
 # Register the page views with the shell. Views are imported here so the
 # page registry is populated when the main window is imported. The dataset,
-# training, and recall pages share the view models created by MainWindow;
-# their registrations are updated in MainWindow.__init__ to bind those
-# instances.
+# training, recall, dashboard, and settings pages share the view models
+# created by MainWindow; their registrations are updated in
+# MainWindow.__init__ to bind those instances.
 from associative_memory.presentation.views.dashboard_view import DashboardView  # noqa: E402
 from associative_memory.presentation.views.dataset_view import DatasetView  # noqa: E402
 from associative_memory.presentation.views.experiment_view import (  # noqa: E402
@@ -397,7 +527,20 @@ from associative_memory.presentation.views.training_view import (  # noqa: E402
     TrainingView,
 )
 
-register_page(NavigationDestination.DASHBOARD, DashboardView)
+
+def _default_dashboard_page(parent: QWidget | None = None) -> QWidget:
+    """Build the Dashboard page with its own view model."""
+
+    return DashboardView(parent=parent)
+
+
+def _default_settings_page(parent: QWidget | None = None) -> QWidget:
+    """Build the Settings page with its own view model."""
+
+    return SettingsView(parent=parent)
+
+
+register_page(NavigationDestination.DASHBOARD, _default_dashboard_page)
 register_page(
     NavigationDestination.IMAGE_DATASET,
     lambda parent=None: DatasetView(parent=parent),
@@ -414,4 +557,4 @@ register_page(
     NavigationDestination.EXPERIMENT_HISTORY,
     lambda parent=None: ExperimentView(parent=parent),
 )
-register_page(NavigationDestination.SETTINGS, SettingsView)
+register_page(NavigationDestination.SETTINGS, _default_settings_page)

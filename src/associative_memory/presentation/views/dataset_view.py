@@ -226,6 +226,12 @@ class DatasetView(QWidget):
         super().__init__(parent)
         self._view_model = view_model or DatasetViewModel()
         self._rows: dict[str, EntryRow] = {}
+        # Track the last-shown preview result so we can skip redundant redraws
+ # when the same result is re-emitted (e.g. rapid config tweaks).
+        self._last_shown_result: PreprocessingResult | None = None
+        # Track the last-shown pixel-on count so we can skip recomputation
+ # when the metric value has not actually changed.
+        self._last_shown_pixel_count: int | None = None
 
         self._build_layout()
         self._wire_signals()
@@ -676,7 +682,12 @@ class DatasetView(QWidget):
         self._update_preview_metrics(self._view_model.current_result)
 
     def _on_preview_changed(self, result: PreprocessingResult | None) -> None:
+        # Skip redraw when the same result is re-emitted (e.g. rapid config
+        # tweaks that don't change the underlying preprocessing outcome).
+        if result is self._last_shown_result:
+            return
         if result is None:
+            self._last_shown_result = None
             self._file_label.set_full_text("No image imported")
             self._original_canvas.clear()
             self._processed_canvas.clear()
@@ -707,6 +718,7 @@ class DatasetView(QWidget):
         )
         self._update_preview_metrics(result)
         self._add_button.setEnabled(self._view_model.current_is_compatible())
+        self._last_shown_result = result
 
     def _update_preview_metrics(
         self, result: PreprocessingResult | None
@@ -722,18 +734,24 @@ class DatasetView(QWidget):
                 self._pixels_on_metric,
             ):
                 card.set_value(None)
+            self._last_shown_pixel_count = None
             return
 
         self._width_metric.set_value(result.width)
         self._height_metric.set_value(result.height)
         self._vector_length_metric.set_value(result.vector_length)
         self._encoding_metric.set_value(result.encoding.value)
-        if result.encoded_matrix is not None:
-            self._pixels_on_metric.set_value(
-                int((result.encoded_matrix != 0).sum())
-            )
-        else:
-            self._pixels_on_metric.set_value(None)
+        pixel_count = (
+            int((result.encoded_matrix != 0).sum())
+            if result.encoded_matrix is not None
+            else None
+        )
+        # Only update the pixels-on metric when its value has actually
+        # changed; this avoids redundant numpy sum() calls during rapid
+        # config adjustments.
+        if pixel_count != self._last_shown_pixel_count:
+            self._pixels_on_metric.set_value(pixel_count)
+            self._last_shown_pixel_count = pixel_count
 
     def _on_entries_changed(self) -> None:
         vm = self._view_model

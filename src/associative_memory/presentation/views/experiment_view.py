@@ -79,6 +79,9 @@ class ExperimentView(QWidget):
         self._wire_signals()
         self._refresh_entries()
         self._view_model.refresh()
+        # Track the last-rendered comparison so we can skip a full grid
+        # rebuild when the comparison data has not actually changed.
+        self._last_shown_comparison: object | None = None
 
     # ------------------------------------------------------------------ layout
 
@@ -708,6 +711,32 @@ class ExperimentView(QWidget):
 
     def _render_comparison(self, comparison: ExperimentComparison) -> None:
         """Lay out the comparison rows produced by the service."""
+
+        # Skip full grid rebuild when the comparison object is the same
+        # reference that was already rendered (e.g. rapid toggling between
+        # two experiments). Only the notes/subtitle may need updating.
+        if self._last_shown_comparison is comparison:
+            # Still update subtitle and notes since those can change
+     # independently of the row data object identity.
+            self._compare_subtitle.setText(
+                "Left: "
+                f"{comparison.left.display_name}   ·   Right: "
+                f"{comparison.right.display_name}"
+                "   —   incompatible values are annotated instead of compared."
+            )
+            if comparison.notes:
+                self._compare_notes.setText(
+                    "Notes:\n"
+                    + "\n".join(f"  •  {note}" for note in comparison.notes)
+                )
+            else:
+                self._compare_notes.setText(
+                    "No comparability warnings: the shared structure of the two "
+                    "experiments makes their aligned values comparable."
+                )
+            return
+
+        self._last_shown_comparison = comparison
 
         self._compare_subtitle.setText(
             "Left: "

@@ -544,6 +544,12 @@ QLabel#TrainingStateText {
 /* ---------- Recall workspace ---------- */
 
 QStackedWidget#RecallStateStack,
+QStackedWidget#DashboardDatasetStack,
+QStackedWidget#DashboardModelStack,
+QStackedWidget#DashboardExperimentStack,
+QWidget#DashboardDatasetContent,
+QWidget#DashboardModelContent,
+QWidget#DashboardExperimentContent,
 QWidget#RecallPlaceholderPage,
 QWidget#VectorView,
 QWidget#StepNavigator,
